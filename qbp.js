@@ -43,4 +43,9 @@ function qbp(opts) {
     this.add = add;
 };
 
-module.exports = qbp;
+function Options() {}
+
+module.exports = {
+    qbp: qbp
+    Options: Options
+};
