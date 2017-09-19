@@ -1,19 +1,13 @@
-declare namespace qdp {
-    interface qdp {
-        new (options: Options);
-        add(item: any);
-        add(arr: any[]);
-        start();
-        pause();
-    }
-
-    interface Options {
-        threads: number;
-        progress: function;
-        process: function;
+declare namespace qbp {
+    export class qbp {
+        constructor (options: any);
+        add(item: any): void;
+        add(arr: any[]): void;
+        start(): void;
+        pause(): void;
     }
 }
 
-declare module "qpd" {
-    export = qdp;
+declare module "qbp" {
+    export = qbp;
 }
