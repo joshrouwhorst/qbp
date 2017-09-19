@@ -1,0 +1,27 @@
+{
+  "name": "qbp",
+  "version": "1.0.0",
+  "description": "Tool to queue, batch, and process asyncronously with controlled threads.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joshrouwhorst/qbp.git"
+  },
+  "keywords": [
+    "queue",
+    "batch",
+    "process",
+    "async",
+    "concurrent",
+    "thread"
+  ],
+  "author": "Josh Rouwhorst (http://joshrouwhorst.com)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/joshrouwhorst/qbp/issues"
+  },
+  "homepage": "https://github.com/joshrouwhorst/qbp#readme"
+}
