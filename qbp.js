@@ -43,7 +43,16 @@ function qbp(opts) {
 
     function progress() {
         var perc = completeCount / itemCount;
-        opts.progress(perc, completeCount, itemCount, threadCount);
+
+        var obj = {
+            perc: perc,
+            complete: completeCount,
+            total: itemCount,
+            threads: threadCount
+        };
+
+        opts.progress(obj);
+
         if (running && opts.progressInterval > 0) {
             setTimeout(progress, opts.progressInterval);
         }
