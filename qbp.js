@@ -9,6 +9,7 @@ function qbp(opts) {
     var queue = [];
     var running = false;
     var totalCount = 0;
+    var itemCount = 0;
     var completeCount = 0;
     var threadCount = 0;
 
