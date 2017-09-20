@@ -29,12 +29,12 @@ function qbp(opts) {
             queue.push(itemOrArray);
         }
 
-        setupThreads();
+        start();
     }
 
     function start() {
         running = true;
-        setupThreads();
+        setupThreads(true);
         progress();
     }
 
