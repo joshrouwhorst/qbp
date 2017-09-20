@@ -22,7 +22,7 @@ function qbp(opts) {
     function add(itemOrArray) {
         if (itemOrArray instanceof Array) {
             itemCount += itemOrArray.length;
-            queue.concat(queue, itemOrArray);
+            queue = queue.concat(queue, itemOrArray);
         }
         else {
             itemCount++;
@@ -45,12 +45,7 @@ function qbp(opts) {
     function progress() {
         var perc = completeCount / itemCount;
 
-        var obj = {
-            perc: perc,
-            complete: completeCount,
-            total: itemCount,
-            threads: threadCount
-        };
+        var obj = new Progress(perc, completeCount, itemCount, threadCount);
 
         opts.progress(obj);
 
@@ -82,8 +77,19 @@ function qbp(opts) {
     this.add = add;
 };
 
+function Options() {}
+
+function Progress(perc, complete, total, threads) {
+    this.Percent = perc;
+    this.Complete = complete;
+    this.Total = total;
+    this.Threads = threads;
+}
+
 function noop() {};
 
 module.exports = {
-    qbp: qbp
+    qbp: qbp,
+    Options: Options,
+    Progress: Progress
 };
