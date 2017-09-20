@@ -1,9 +1,9 @@
 function qbp(opts) {
     var options = {
         threads: 1,
-        progressInterval: 0,
+        progressInterval: 10000,
         progress: noop,
-        finished: noop
+        empty: noop
     };
 
     var queue = [];
@@ -45,11 +45,11 @@ function qbp(opts) {
     function progress() {
         var perc = completeCount / itemCount;
 
-        var obj = new Progress(perc, completeCount, itemCount, threadCount);
+        var obj = new Progress(perc, completeCount, itemCount, threadCount, queue.length);
 
         opts.progress(obj);
 
-        if (running && opts.progressInterval > 0) {
+        if (running && opts.progress !== noop) {
             setTimeout(progress, opts.progressInterval);
         }
     }
@@ -68,7 +68,7 @@ function qbp(opts) {
 
         if (queue.length === 0 && running && threadCount === 0) {
             running = false;
-            opts.finished();
+            opts.empty();
         }
     }
 
@@ -79,11 +79,12 @@ function qbp(opts) {
 
 function Options() {}
 
-function Progress(perc, complete, total, threads) {
+function Progress(perc, complete, total, threads, queued) {
     this.percent = perc;
     this.complete = complete;
     this.total = total;
     this.threads = threads;
+    this.queued = queued;
 }
 
 function noop() {};

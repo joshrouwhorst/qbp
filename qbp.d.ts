@@ -9,10 +9,10 @@ declare namespace qbp {
 
     export class Options {
         threads: number;
-        process(item: any, done: Function): void;
+        process<T>(item: T, done: Function): void;
         progress(progress: Progress): void;
         progressInterval: number;
-        finished(): void;
+        empty(): void;
     }
 
     export class Progress {
@@ -20,6 +20,7 @@ declare namespace qbp {
         complete: number;
         total: number;
         threads: number;
+        queued: number;
     }
 }
 
