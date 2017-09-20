@@ -80,10 +80,10 @@ function qbp(opts) {
 function Options() {}
 
 function Progress(perc, complete, total, threads) {
-    this.Percent = perc;
-    this.Complete = complete;
-    this.Total = total;
-    this.Threads = threads;
+    this.percent = perc;
+    this.complete = complete;
+    this.total = total;
+    this.threads = threads;
 }
 
 function noop() {};

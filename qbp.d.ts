@@ -1,6 +1,6 @@
 declare namespace qbp {
     export class qbp {
-        constructor (options: options);
+        constructor (options: Options);
         add(item: any): void;
         add(arr: any[]): void;
         start(): void;
@@ -16,10 +16,10 @@ declare namespace qbp {
     }
 
     export class Progress {
-        Percent: number = 0;
-        Complete: number = 0;
-        Total: number = 0;
-        Threads: number = 0;
+        percent: number;
+        complete: number;
+        total: number;
+        threads: number;
     }
 }
 
