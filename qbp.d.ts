@@ -1,18 +1,11 @@
 declare namespace qbp {
     export class qbp {
-        constructor (options: Options);
+        constructor (options: any);
         add(item: any): void;
         add(arr: any[]): void;
-        start(): void;
+        create(): qbp;
+        resume(): void;
         pause(): void;
-    }
-
-    export class Options {
-        threads: number;
-        process<T>(item: T, done: Function): void;
-        progress(progress: Progress): void;
-        progressInterval: number;
-        empty(): void;
     }
 
     export class Progress {
@@ -21,6 +14,8 @@ declare namespace qbp {
         total: number;
         threads: number;
         queued: number;
+        name: string;
+        itemsPerSecond: number;
     }
 }
 

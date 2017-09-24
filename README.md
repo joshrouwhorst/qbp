@@ -12,6 +12,7 @@ Using TypeScript? You should be able to import the project easily.
 ```js
 function runQbp(items) {
     var queue  = new qbp({
+        name: 'ItemQueue', // Optional - The name is passed to the progress function, helpful with multiple queues running simultaneously
         process: addItemToDatabase, // Required - Function of what you want to happen to each item. Gets passed the item and a callback function.
         threads: 5, // Default 1 - Number of items getting processed concurrently
         progress: progressFunc, // Optional - Function that gets called with status updates on how the process is going
@@ -31,11 +32,12 @@ function addItemToDatabase(item, done) {
 }
 
 function progressFunc(prog) {
+    console.log('Name: ' + prog.name);
     console.log('Percent Complete: ' + prog.percent);
     console.log('Items Complete: ' + prog.complete);
     console.log('Total Items: ' + prog.total);
-    console.log('Threads: ' + prog.threads);
     console.log('Queued Items: ' + prog.queued);
+    console.log('Threads: ' + prog.threads);
 }
 
 function emptyFunc() {
@@ -66,3 +68,6 @@ How many threads are currently running.
 
 ### Progress.queued
 How many items have yet to be processed.
+
+### Progress.name
+The name given to the queue when setup. Helps to differentiate between multiple queues running at the same time.
