@@ -20,6 +20,10 @@ function qbp(opts) {
         }
     }
 
+    if (opts.items) {
+        add(opts.items);
+    }
+
     function add(itemOrArray) {
         if (itemOrArray instanceof Array) {
             itemCount += itemOrArray.length;
