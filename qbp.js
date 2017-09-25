@@ -6,6 +6,8 @@ function qbp(opts) {
         empty: noop
     };
 
+    var _this = this;
+
     var queue = [];
     var running = false;
     var totalCount = 0;
@@ -34,7 +36,7 @@ function qbp(opts) {
             queue.push(itemOrArray);
         }
 
-        start();
+        resume();
     }
 
     function create(newoptions) {
@@ -68,7 +70,7 @@ function qbp(opts) {
         var timeDiff = 1000 / opts.progressInterval;
         var itemsPerSecond = Math.round(newItemsCompleted * timeDiff);
 
-        var obj = new Progress(perc, completeCount, itemCount, threadCount, queue.length, opts.name, itemsPerSecond);
+        var obj = new Progress(perc, completeCount, itemCount, threadCount, queue.length, opts.name, itemsPerSecond, _this);
 
         opts.progress(obj);
 
@@ -106,13 +108,14 @@ function qbp(opts) {
 
 function Options() {}
 
-function Progress(perc, complete, total, threads, queued, name, itemsPerSecond) {
+function Progress(perc, complete, total, threads, queued, name, itemsPerSecond, queue) {
     this.percent = perc;
     this.complete = complete;
     this.total = total;
     this.threads = threads;
     this.queued = queued;
     this.itemsPerSecond = itemsPerSecond
+    this.queue = queue;
 
     if (name) {
         this.name = name;

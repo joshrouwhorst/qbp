@@ -16,6 +16,7 @@ declare namespace qbp {
         queued: number;
         name: string;
         itemsPerSecond: number;
+        queue: qbp;
     }
 }
 
