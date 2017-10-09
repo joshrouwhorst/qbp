@@ -6,6 +6,12 @@ Have thousands of items you need to loop through performing asynchronous tasks s
 * [Full Example](#full-example)
 * [Minimal Example](#minimal-example)
 * [Creating a Queue](#creating-a-queue)
+* [Adding Items](#adding-items)
+* [Emptying Items](#emptying-items)
+* [Pausing](#pausing)
+* [Progress Updates](#progress-updates)
+* [Advanced Example](#advanced-example)
+* [Alternate Example](#alternate-example)
 
 ## Usage
 To install run `npm install qbp`.
@@ -14,7 +20,7 @@ Using TypeScript? You should be able to import the project easily.
 
 `import { qbp, QbpProgress } from 'qbp';`.
 
-# Full Example
+## Full Example
 ```js
 function runQbp(items) {
     qbp.create({
@@ -122,7 +128,7 @@ How many items have yet to be processed.
 ### QbpProgress.name
 The name given to the queue when setup. Helps to differentiate between multiple queues running at the same time.
 
-## More Advanced Example
+## Advanced Example
 In this example we're going to pair Student records in a database with User records in a database based on their email address fields. If it can't find a user with that email address we'll assume the student record is bad and delete it. So this process is `Start -> Get Student Records -> Find User Records -> Update Student Records -> Delete Bad Records -> Complete`. This is a staged example where each step in the process is completely finished before the next step is started.
 
 ```js
