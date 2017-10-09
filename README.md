@@ -16,6 +16,10 @@ Have thousands of items you need to loop through performing asynchronous tasks s
 ## Usage
 To install run `npm install qbp`.
 
+If you're not using Typescript, you'll probably want to use this import statement.
+
+`var qbp = require('qbp').qbp;`
+
 Using TypeScript? You should be able to import the project easily.
 
 `import { qbp, QbpProgress } from 'qbp';`.

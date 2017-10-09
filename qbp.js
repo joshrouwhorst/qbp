@@ -68,7 +68,7 @@ function qbp(opts) {
         var timeDiff = 1000 / opts.progressInterval;
         var itemsPerSecond = Math.round(newItemsCompleted * timeDiff);
 
-        var obj = new Progress(perc, completeCount, itemCount, threadCount, queue.length, opts.name, itemsPerSecond, _this);
+        var obj = new QbpProgress(perc, completeCount, itemCount, threadCount, queue.length, opts.name, itemsPerSecond, _this);
 
         opts.progress(obj);
 
