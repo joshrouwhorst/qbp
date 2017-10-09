@@ -1,14 +1,20 @@
 # qbp - query, batch, process
 Have thousands of items you need to loop through performing asynchronous tasks such as database or server calls? Trying to find a way to easily limit the concurrent number of calls and keep them all straight? Wishing you had a tool to queue, batch, and process all these items? This package may be right for you!
 
-##Usage
+## Contents
+* [Usage](##usage)
+* [Full Example](#full-example)
+* [Minimal Example](##minimal-example)
+* [Creating a Queue](##creating-a-queue)
+
+## Usage
 To install run `npm install qbp`.
 
 Using TypeScript? You should be able to import the project easily.
 
 `import { qbp, QbpProgress } from 'qbp';`.
 
-## Full Example
+# Full Example
 ```js
 function runQbp(items) {
     qbp.create({
@@ -216,7 +222,7 @@ app.progressOutput = function progressOutput(vals) {
 ```
 
 ## Alternate Example
-This is an alternate way of structuring the processing and may improve your performance. Instead of each step in the process being completed before the next is started, this will continually send students to either be updated or deleted immediately. 
+This is an alternate way of structuring the processing and may improve your performance. Instead of each step in the process being completed before the next is started, this will continually send students to either be updated or deleted immediately.
 
 ```js
 
