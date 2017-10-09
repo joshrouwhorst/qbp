@@ -5,7 +5,7 @@ declare namespace qbp {
         add(arr: any[]): void;
         resume(): void;
         pause(): void;
-        static create(): qbp;
+        static create(options: any): qbp;
     }
 
     export class QbpProgress {
