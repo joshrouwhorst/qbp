@@ -5,6 +5,7 @@ declare namespace qbp {
         add(arr: any[]): void;
         resume(): void;
         pause(): void;
+        empty(): void;
         static create(options: any): qbp;
     }
 
