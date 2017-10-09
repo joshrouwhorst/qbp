@@ -115,3 +115,177 @@ How many items have yet to be processed.
 
 ### QbpProgress.name
 The name given to the queue when setup. Helps to differentiate between multiple queues running at the same time.
+
+## More Advanced Example
+In this example we're going to pair Student records in a database with User records in a database based on their email address fields. If it can't find a user with that email address we'll assume the student record is bad and delete it. So this process is `Start -> Get Student Records -> Find User Records -> Update Student Records -> Delete Bad Records -> Complete`. This is a staged example where each step in the process is completely finished before the next step is started.
+
+```js
+var students = [];
+var foundStudents = [];
+var badStudentRecords = [];
+
+var app = {};
+
+app.start = function start() {
+    // Using qbp to call the functions that make up this process.
+    // Better than creating a nested tree of callback functions.
+    var functions = [
+        'getStudents',
+        'findUsers',
+        'updateStudents',
+        'deleteBadRecords'
+    ];
+
+    console.log('Starting...');
+    qbp.create({
+        items: functions,
+        empty: function () {
+            console.log('Done!');
+        },
+        process: function (func, done, queue) {
+            app[func](done);
+        }
+    })
+}
+
+app.getStudents = function getStudents(callback) {
+    db.getStudentRecords(function (results) {
+        students = results;
+        callback();
+    });
+}
+
+app.findUsers = function findUsers(callback) {
+    qbp.create({
+        name: 'FindUsers',
+        items: students,
+        progress: progressOutput,
+        threads: 50,
+        empty: callback,
+        process: function (student, done, queue) {
+            db.getUserByEmail(student.email_address, function (result) {
+                if (result) {
+                    student.user_id = result.id;
+                    foundStudents.push(student);
+                }
+                else {
+                    badStudentRecords.push(student);
+                }
+
+                done();
+            });
+        }
+    });
+}
+
+app.updateStudents = function updateStudents(callback) {
+    qbp.create({
+        name: 'UpdateStudents',
+        items: foundStudents,
+        progress: progressOutput,
+        threads: 50,
+        empty: callback,
+        process: function (student, done, queue) {
+            db.updateStudent(student, function () {
+                done();
+            });
+        }
+    });
+}
+
+app.deleteBadRecords = function deleteBadRecords(callback) {
+    qbp.create({
+        name: 'DeleteBadRecords',
+        items: badStudentRecords,
+        progress: progressOutput,
+        threads: 1000,
+        empty: callback,
+        process: function (student, done, queue) {
+            db.deleteStudent(student, function () {
+                done();
+            });
+        }
+    });
+}
+
+app.progressOutput = function progressOutput(vals) {
+    var perc = Math.round(vals.percent * 100);
+    console.log(vals.name + ' - ' + perc + '% - ' + vals.itemsPerSecond + '/s');
+}
+
+```
+
+## Alternate Example
+This is an alternate way of structuring the processing and may improve your performance. Instead of each step in the process being completed before the next is started, this will continually send students to either be updated or deleted immediately. 
+
+```js
+
+// Setup all the queues needed
+var findUsersQueue = new qbp({
+    name: 'FindUsers',
+    progress: progressOutput,
+    threads: 50,
+    empty: onEmpty,
+    process: function (student, done, queue) {
+        db.getUserByEmail(student.email_address, function (result) {
+            // Add student records to the queues to update or delete as needed.
+            // These queues will start working immediately without this queue needing to be finished.
+            if (result) {
+                student.user_id = result.id;
+                updateStudentsQueue.add(student); // <----<<<
+            }
+            else {
+                deleteStudentQueue.add(student); // <----<<<
+            }
+
+            done();
+        });
+    }
+});
+
+var updateStudentsQueue = new qbp({
+    name: 'UpdateStudents',
+    progress: progressOutput,
+    threads: 50,
+    empty: onEmpty,
+    process: function (student, done, queue) {
+        db.updateStudent(student, function () {
+            done();
+        });
+    }
+});
+
+var deleteStudentQueue = new qbp({
+    name: 'DeleteBadRecords',
+    progress: progressOutput,
+    threads: 1000,
+    empty: onEmpty,
+    process: function (student, done, queue) {
+        db.deleteStudent(student, function () {
+            done();
+        });
+    }
+});
+
+// Kicking off the process here
+function start() {
+    db.getStudentRecords(function (students) {
+        // Queueing up students for the first step
+        findUsersQueue.add(students);
+    });
+}
+
+function onEmpty() {
+    // Once all of the queues are empty that means you're done!
+    if (findUsersQueue.status === 'empty' &&
+        updateStudentsQueue.status === 'empty' &&
+        deleteStudentQueue.status === 'empty') {
+        console.log('Done!');
+    }
+}
+
+function progressOutput(vals) {
+    console.log(vals.name + ' - ' + vals.complete + ' completed items - ' + vals.total + ' total items - ' + vals.itemsPerSecond + '/s');
+}
+
+```

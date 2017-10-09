@@ -1,6 +1,6 @@
 {
   "name": "qbp",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Tool to queue, batch, and process asynchronously with controlled threads.",
   "main": "qbp.js",
   "types": "qbp.d.ts",

@@ -8,6 +8,8 @@ function qbp(opts) {
 
     var _this = this;
 
+    _this.status = 'waiting';
+
     var queue = [];
     var running = false;
     var totalCount = 0;
@@ -40,17 +42,19 @@ function qbp(opts) {
     }
 
     function empty() {
-        queue.length = 0; s
+        queue.length = 0;
     }
 
     function resume() {
         running = true;
+        _this.status = 'running';
         setupThreads(true);
         progress();
     }
 
     function pause() {
         running = false;
+        _this.status = 'paused';
     }
 
     function progress(once) {
@@ -89,6 +93,7 @@ function qbp(opts) {
 
         if (queue.length === 0 && running && threadCount === 0) {
             running = false;
+            _this.status = 'empty';
             progress(true);
             opts.empty();
         }

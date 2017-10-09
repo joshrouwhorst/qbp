@@ -6,6 +6,7 @@ declare namespace qbp {
         resume(): void;
         pause(): void;
         empty(): void;
+        status: string;
         static create(options: any): qbp;
     }
 
