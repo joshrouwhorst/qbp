@@ -39,14 +39,8 @@ function qbp(opts) {
         resume();
     }
 
-    function create(newoptions) {
-        for (var key in opts) {
-            if (newoptions[key] === undefined) {
-                newoptions[key] = opts[key];
-            }
-        }
-
-        return new qbp(newoptions);
+    function empty() {
+        queue.length = 0; s
     }
 
     function resume() {
@@ -90,7 +84,7 @@ function qbp(opts) {
         while(threadCount < opts.threads && queue.length > 0 && running) {
             threadCount++;
             var item = queue.splice(0, 1)[0];
-            opts.process(item, setupThreads);
+            opts.process(item, setupThreads, this);
         }
 
         if (queue.length === 0 && running && threadCount === 0) {
@@ -106,9 +100,13 @@ function qbp(opts) {
     this.add = add;
 };
 
+qbp.create = function (opts) {
+    return new qbp(opts);
+}
+
 function Options() {}
 
-function Progress(perc, complete, total, threads, queued, name, itemsPerSecond, queue) {
+function QbpProgress(perc, complete, total, threads, queued, name, itemsPerSecond, queue) {
     this.percent = perc;
     this.complete = complete;
     this.total = total;
@@ -126,6 +124,5 @@ function noop() {};
 
 module.exports = {
     qbp: qbp,
-    Options: Options,
-    Progress: Progress
+    QbpProgress: QbpProgress
 };

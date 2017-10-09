@@ -3,12 +3,12 @@ declare namespace qbp {
         constructor (options: any);
         add(item: any): void;
         add(arr: any[]): void;
-        create(): qbp;
         resume(): void;
         pause(): void;
+        static create(): qbp;
     }
 
-    export class Progress {
+    export class QbpProgress {
         percent: number;
         complete: number;
         total: number;
