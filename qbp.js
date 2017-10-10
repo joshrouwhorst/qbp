@@ -99,7 +99,6 @@ function qbp(opts) {
         }
     }
 
-    this.create = create;
     this.resume = resume;
     this.pause = pause;
     this.add = add;
@@ -108,8 +107,6 @@ function qbp(opts) {
 qbp.create = function (opts) {
     return new qbp(opts);
 }
-
-function Options() {}
 
 function QbpProgress(perc, complete, total, threads, queued, name, itemsPerSecond, queue) {
     this.percent = perc;
