@@ -46,10 +46,12 @@ function qbp(opts) {
     }
 
     function resume() {
-        running = true;
-        _this.status = 'running';
-        setupThreads(true);
-        progress();
+        if (!running) {
+            running = true;
+            _this.status = 'running';
+            setupThreads(true);
+            progress();
+        }
     }
 
     function pause() {

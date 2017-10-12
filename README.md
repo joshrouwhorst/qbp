@@ -3,15 +3,16 @@ Have thousands of items you need to loop through performing asynchronous tasks s
 
 ## Contents
 * [Usage](#usage)
-* [Full Example](#full-example)
+* [Full Options Example](#full-options-example)
 * [Minimal Example](#minimal-example)
+* [Advanced Example](#advanced-example)
+* [Alternate Example](#alternate-example)
 * [Creating a Queue](#creating-a-queue)
 * [Adding Items](#adding-items)
 * [Emptying Items](#emptying-items)
 * [Pausing](#pausing)
 * [Progress Updates](#progress-updates)
-* [Advanced Example](#advanced-example)
-* [Alternate Example](#alternate-example)
+
 
 ## Usage
 To install run `npm install qbp`.
@@ -24,7 +25,7 @@ Using TypeScript? You should be able to import the project easily.
 
 `import { qbp, QbpProgress } from 'qbp';`.
 
-## Full Example
+## Full Options Example
 ```js
 function runQbp(items) {
     qbp.create({
@@ -96,44 +97,83 @@ function emptyFunc() {
 }
 ```
 
-## Creating a Queue
-You can create a queue [aka, an instance of qbp] in a couple different ways. First, as in the examples above you can use the static function `qbp.create(options)`. This returns the instance of the queue so you could set it to a variable if you wished, `var queue = qbp.create(options);`. You could also use the `new` operator `var queue = new qbp(options);`. Both ways are valid, whatever you prefer.
-
-## Adding Items
-You can add an individual item or an array of items by passing them into `queue.add()`. Adding items immediately starts processing, but you can always add more items to the queue even after it's been empty.
-
-## Emptying Items
-If you're done with your queue and don't want any more items processed, you can call `queue.empty()` to clear out queued up items. Any items that have already begun processing will still be finished. Once those are finished, the `empty` callback function supplied in the options when creating the queue will get called. You can still add more items to start the queue back up again at any time.
-
-## Pausing
-If you need to stop your queue from processing for any reason you can call `queue.pause()`. And you can resume at any time by calling `queue.resume()`. Adding new items will also restart the queue.
-
-## Progress Updates
-You can supply a function when setting up your queue that will receive progress updates. The function will get an object.
-
-### QbpProgress.percent
-This gives you the percentage (from 0 to 1) of the number of completed items out of the total items added to the queue. Keep in mind, if you add more items as the queue is running the percentage will suddenly go down.
-
-### QbpProgress.queue
-Supplies the actual queue object. Handy if you're using multiple queues simultaneously with the same progress function.
-
-### QbpProgress.complete
-How many items have been completely processed.
-
-### QbpProgress.total
-How many items have been added to the queue.
-
-### QbpProgress.threads
-How many threads are currently running.
-
-### QbpProgress.queued
-How many items have yet to be processed.
-
-### QbpProgress.name
-The name given to the queue when setup. Helps to differentiate between multiple queues running at the same time.
-
 ## Advanced Example
-In this example we're going to pair Student records in a database with User records in a database based on their email address fields. If it can't find a user with that email address we'll assume the student record is bad and delete it. So this process is `Start -> Get Student Records -> Find User Records -> Update Student Records -> Delete Bad Records -> Complete`. This is a staged example where each step in the process is completely finished before the next step is started.
+In this example we're going to pair Student records in a database with User records in a database based on their email address fields. If it can't find a user with that email address we'll assume the student record is bad and delete it. In this example, we add records to their appropriate queue immediately, processing them as they're ready and throttled by the thread counts for each queue.
+
+```js
+
+// Setup all the queues needed
+var findUsersQueue = new qbp({
+    name: 'FindUsers',
+    progress: progressOutput,
+    threads: 50,
+    empty: onEmpty,
+    process: function (student, done, queue) {
+        db.getUserByEmail(student.email_address, function (result) {
+            // Add student records to the queues to update or delete as needed.
+            // These queues will start working immediately without this queue needing to be finished.
+            if (result) {
+                student.user_id = result.id;
+                updateStudentsQueue.add(student); // <----<<<
+            }
+            else {
+                deleteStudentQueue.add(student); // <----<<<
+            }
+
+            done();
+        });
+    }
+});
+
+var updateStudentsQueue = new qbp({
+    name: 'UpdateStudents',
+    progress: progressOutput,
+    threads: 50,
+    empty: onEmpty,
+    process: function (student, done, queue) {
+        db.updateStudent(student, function () {
+            done();
+        });
+    }
+});
+
+var deleteStudentQueue = new qbp({
+    name: 'DeleteBadRecords',
+    progress: progressOutput,
+    threads: 1000,
+    empty: onEmpty,
+    process: function (student, done, queue) {
+        db.deleteStudent(student, function () {
+            done();
+        });
+    }
+});
+
+// Kicking off the process here
+function start() {
+    db.getStudentRecords(function (students) {
+        // Queueing up students for the first step
+        findUsersQueue.add(students);
+    });
+}
+
+function onEmpty() {
+    // Once all of the queues are empty that means you're done!
+    if (findUsersQueue.status === 'empty' &&
+        updateStudentsQueue.status === 'empty' &&
+        deleteStudentQueue.status === 'empty') {
+        console.log('Done!');
+    }
+}
+
+function progressOutput(vals) {
+    console.log(vals.name + ' - ' + vals.complete + ' completed items - ' + vals.total + ' total items - ' + vals.itemsPerSecond + '/s');
+}
+
+```
+
+## Alternate Example
+Another way to do this would be to stage the process. And the subsequent stage doesn't run until the previous stage is finished. So this process is `Start -> Get Student Records -> Find User Records -> Update Student Records -> Delete Bad Records -> Complete`. 
 
 ```js
 var students = [];
@@ -231,77 +271,40 @@ app.progressOutput = function progressOutput(vals) {
 
 ```
 
-## Alternate Example
-This is an alternate way of structuring the processing and may improve your performance. Instead of each step in the process being completed before the next is started, this will continually send students to either be updated or deleted immediately.
+## Creating a Queue
+You can create a queue [aka, an instance of qbp] in a couple different ways. First, as in the examples above you can use the static function `qbp.create(options)`. This returns the instance of the queue so you could set it to a variable if you wished, `var queue = qbp.create(options);`. You could also use the `new` operator `var queue = new qbp(options);`. Both ways are valid, whatever you prefer.
 
-```js
+## Adding Items
+You can add an individual item or an array of items by passing them into `queue.add()`. Adding items immediately starts processing, but you can always add more items to the queue even after it's been empty.
 
-// Setup all the queues needed
-var findUsersQueue = new qbp({
-    name: 'FindUsers',
-    progress: progressOutput,
-    threads: 50,
-    empty: onEmpty,
-    process: function (student, done, queue) {
-        db.getUserByEmail(student.email_address, function (result) {
-            // Add student records to the queues to update or delete as needed.
-            // These queues will start working immediately without this queue needing to be finished.
-            if (result) {
-                student.user_id = result.id;
-                updateStudentsQueue.add(student); // <----<<<
-            }
-            else {
-                deleteStudentQueue.add(student); // <----<<<
-            }
+## Emptying Items
+If you're done with your queue and don't want any more items processed, you can call `queue.empty()` to clear out queued up items. Any items that have already begun processing will still be finished. Once those are finished, the `empty` callback function supplied in the options when creating the queue will get called. You can still add more items to start the queue back up again at any time.
 
-            done();
-        });
-    }
-});
+## Pausing
+If you need to stop your queue from processing for any reason you can call `queue.pause()`. And you can resume at any time by calling `queue.resume()`. Adding new items will also restart the queue.
 
-var updateStudentsQueue = new qbp({
-    name: 'UpdateStudents',
-    progress: progressOutput,
-    threads: 50,
-    empty: onEmpty,
-    process: function (student, done, queue) {
-        db.updateStudent(student, function () {
-            done();
-        });
-    }
-});
+## Progress Updates
+You can supply a function when setting up your queue that will receive progress updates. The function will get an object.
 
-var deleteStudentQueue = new qbp({
-    name: 'DeleteBadRecords',
-    progress: progressOutput,
-    threads: 1000,
-    empty: onEmpty,
-    process: function (student, done, queue) {
-        db.deleteStudent(student, function () {
-            done();
-        });
-    }
-});
+### QbpProgress.percent
+This gives you the percentage (from 0 to 1) of the number of completed items out of the total items added to the queue. Keep in mind, if you add more items as the queue is running the percentage will suddenly go down.
 
-// Kicking off the process here
-function start() {
-    db.getStudentRecords(function (students) {
-        // Queueing up students for the first step
-        findUsersQueue.add(students);
-    });
-}
+### QbpProgress.queue
+Supplies the actual queue object. Handy if you're using multiple queues simultaneously with the same progress function.
 
-function onEmpty() {
-    // Once all of the queues are empty that means you're done!
-    if (findUsersQueue.status === 'empty' &&
-        updateStudentsQueue.status === 'empty' &&
-        deleteStudentQueue.status === 'empty') {
-        console.log('Done!');
-    }
-}
+### QbpProgress.complete
+How many items have been completely processed.
 
-function progressOutput(vals) {
-    console.log(vals.name + ' - ' + vals.complete + ' completed items - ' + vals.total + ' total items - ' + vals.itemsPerSecond + '/s');
-}
+### QbpProgress.total
+How many items have been added to the queue.
 
-```
+### QbpProgress.threads
+How many threads are currently running.
+
+### QbpProgress.queued
+How many items have yet to be processed.
+
+### QbpProgress.name
+The name given to the queue when setup. Helps to differentiate between multiple queues running at the same time.
+
+## Advanced Example
