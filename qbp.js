@@ -70,7 +70,9 @@ function qbp(opts) {
         var timeDiff = 1000 / opts.progressInterval;
         var itemsPerSecond = Math.round(newItemsCompleted * timeDiff);
 
-        var obj = new QbpProgress(perc, completeCount, itemCount, threadCount, queue.length, opts.name, itemsPerSecond, _this);
+        var secondsRemaining = Math.ceil(queue.length / itemsPerSecond);
+
+        var obj = new QbpProgress(perc, completeCount, itemCount, threadCount, queue.length, opts.name, itemsPerSecond, secondsRemaining, _this);
 
         opts.progress(obj);
 
@@ -110,7 +112,7 @@ qbp.create = function (opts) {
     return new qbp(opts);
 }
 
-function QbpProgress(perc, complete, total, threads, queued, name, itemsPerSecond, queue) {
+function QbpProgress(perc, complete, total, threads, queued, name, itemsPerSecond, secondsRemaining, queue) {
     this.percent = perc;
     this.complete = complete;
     this.total = total;
@@ -118,6 +120,7 @@ function QbpProgress(perc, complete, total, threads, queued, name, itemsPerSecon
     this.queued = queued;
     this.itemsPerSecond = itemsPerSecond
     this.queue = queue;
+    this.secondsRemaining = secondsRemaining;
 
     if (name) {
         this.name = name;

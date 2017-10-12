@@ -67,6 +67,8 @@ function progressFunc(prog) { // In Typescript, this parameter is a QbpProgress 
     console.log('Total Items: ' + prog.total);
     console.log('Queued Items: ' + prog.queued);
     console.log('Threads: ' + prog.threads);
+    console.log('Items Per Second: ' + prog.itemsPerSecond);
+    console.log('Seconds Remaining: ' + prog.secondsRemaining);
 }
 
 function emptyFunc() {
@@ -166,14 +168,16 @@ function onEmpty() {
     }
 }
 
+// Example output:
+// DeleteBadRecords - 226063 completed items - 501914 total items - 2429/s - 113 seconds remaining
 function progressOutput(vals) {
-    console.log(vals.name + ' - ' + vals.complete + ' completed items - ' + vals.total + ' total items - ' + vals.itemsPerSecond + '/s');
+    console.log(vals.name + ' - ' + vals.complete + ' completed items - ' + vals.total + ' total items - ' + vals.itemsPerSecond + '/s - ' + vals.secondsRemaining + ' seconds remaining');
 }
 
 ```
 
 ## Alternate Example
-Another way to do this would be to stage the process. And the subsequent stage doesn't run until the previous stage is finished. So this process is `Start -> Get Student Records -> Find User Records -> Update Student Records -> Delete Bad Records -> Complete`. 
+Another way to do this would be to stage the process. And the subsequent stage doesn't run until the previous stage is finished. So this process is `Start -> Get Student Records -> Find User Records -> Update Student Records -> Delete Bad Records -> Complete`.
 
 ```js
 var students = [];
@@ -264,6 +268,8 @@ app.deleteBadRecords = function deleteBadRecords(callback) {
     });
 }
 
+// Example Output:
+// DeleteBadRecords - 53% - 2932/s
 app.progressOutput = function progressOutput(vals) {
     var perc = Math.round(vals.percent * 100);
     console.log(vals.name + ' - ' + perc + '% - ' + vals.itemsPerSecond + '/s');
@@ -307,4 +313,8 @@ How many items have yet to be processed.
 ### QbpProgress.name
 The name given to the queue when setup. Helps to differentiate between multiple queues running at the same time.
 
-## Advanced Example
+### QbpProgress.itemsPerSecond
+Average number of items that have been processed within a second since last time the Progress function was called.
+
+### QbpProgress.secondsRemaining
+Estimated number of seconds left to process the queue based on `QbpProgress.itemsPerSecond`.
