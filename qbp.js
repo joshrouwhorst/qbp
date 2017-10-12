@@ -70,7 +70,14 @@ function qbp(opts) {
         var timeDiff = 1000 / opts.progressInterval;
         var itemsPerSecond = Math.round(newItemsCompleted * timeDiff);
 
-        var secondsRemaining = Math.ceil(queue.length / itemsPerSecond);
+        var secondsRemaining;
+
+        if (!itemsPerSecond) {
+            secondsRemaining = -1;
+        }
+        else {
+            secondsRemaining = Math.ceil(queue.length / itemsPerSecond);
+        }
 
         var obj = new QbpProgress(perc, completeCount, itemCount, threadCount, queue.length, opts.name, itemsPerSecond, secondsRemaining, _this);
 
