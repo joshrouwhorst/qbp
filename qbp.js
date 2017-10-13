@@ -17,6 +17,7 @@ function qbp(opts) {
     var completeCount = 0;
     var threadCount = 0;
     var lastCompleteCount = 0;
+    var startingEmpty = false;
 
     for (var key in options) {
         if (opts[key] === undefined) {
@@ -50,7 +51,9 @@ function qbp(opts) {
             running = true;
             _this.status = 'running';
             setupThreads(true);
-            progress();
+            if (queue.length > 0) {
+                progress();
+            }
         }
     }
 
@@ -105,7 +108,7 @@ function qbp(opts) {
         if (queue.length === 0 && running && threadCount === 0) {
             running = false;
             _this.status = 'empty';
-            progress(true);
+            if (itemCount > 0) progress(true);
             opts.empty();
         }
     }
