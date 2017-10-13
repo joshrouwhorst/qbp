@@ -113,6 +113,7 @@ function qbp(opts) {
         }
     }
 
+    this.empty = empty;
     this.resume = resume;
     this.pause = pause;
     this.add = add;
