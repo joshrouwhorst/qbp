@@ -102,7 +102,7 @@ function qbp(opts) {
         while(threadCount < opts.threads && queue.length > 0 && running) {
             threadCount++;
             var item = queue.splice(0, 1)[0];
-            opts.process(item, setupThreads, this);
+            opts.process(item, setupThreads, _this);
         }
 
         if (queue.length === 0 && running && threadCount === 0) {
