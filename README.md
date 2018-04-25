@@ -1,4 +1,7 @@
-# qbp - query, batch, process
+# qbp - queue, batch, process
+
+[![npm version](https://badge.fury.io/js/qbp.svg)](https://badge.fury.io/js/qbp)
+
 Have thousands of items you need to loop through performing asynchronous tasks such as database or server calls? Trying to find a way to easily limit the concurrent number of calls and keep them all straight? Wishing you had a tool to queue, batch, and process all these items? This package may be right for you!
 
 ## Contents
