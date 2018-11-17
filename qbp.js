@@ -12,12 +12,10 @@ function qbp(opts) {
 
     var queue = [];
     var running = false;
-    var totalCount = 0;
     var itemCount = 0;
     var completeCount = 0;
     var threadCount = 0;
     var lastCompleteCount = 0;
-    var startingEmpty = false;
 
     for (var key in options) {
         if (opts[key] === undefined) {
@@ -51,7 +49,7 @@ function qbp(opts) {
             running = true;
             _this.status = 'running';
             setupThreads(true);
-            if (queue.length > 0) {
+            if (queue.length > 0 || completeCount < itemCount) {
                 progress();
             }
         }
