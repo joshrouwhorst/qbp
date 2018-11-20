@@ -37,15 +37,15 @@ function qbp(opts) {
             queue.push(itemOrArray);
         }
 
-        resume();
+        resume(true);
     }
 
     function empty() {
         queue.length = 0;
     }
 
-    function resume() {
-        if (!running) {
+    function resume(newItem) {
+        if (!running && (!newItem || _this.status !== 'paused')) {
             running = true;
             _this.status = 'running';
             setupThreads(true);
