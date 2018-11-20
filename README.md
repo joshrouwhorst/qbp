@@ -14,6 +14,7 @@ Have thousands of items you need to loop through performing asynchronous tasks s
 * [Adding Items](#adding-items)
 * [Emptying Items](#emptying-items)
 * [Pausing](#pausing)
+* [Async Processing](#async-processing)
 * [Progress Updates](#progress-updates)
 
 
@@ -36,6 +37,7 @@ function runQbp(items) {
         name: 'ItemQueue', // Optional - The name is passed to the progress function, helpful with multiple queues running simultaneously
         process: addItemToDatabase, // Required - Function of what you want to happen to each item. Gets passed the item and a callback function.
         threads: 5, // Default 1 - Number of items getting processed concurrently
+        async: false, // Default false - Allows you to specify that the progress function is an async function
         progress: progressFunc, // Optional - Function that gets called with status updates on how the process is going
         progressInterval: 1000, // Default 10000 - How often to get status updates in milliseconds
         empty: emptyFunc // Optional - Function that gets called when we're out of items
@@ -291,6 +293,37 @@ If you're done with your queue and don't want any more items processed, you can 
 
 ## Pausing
 If you need to stop your queue from processing for any reason you can call `queue.pause()`. And you can resume at any time by calling `queue.resume()`. Adding new items will also restart the queue.
+
+## Async Processing
+By default `options.async` is set to false. But if you set it to true and supply an async function to `options.process`, you will only get `item` and `queue` parameters. You won't recieve a `done` function. You can use the `await` keyword throughout the process function or return a `Promise` object and qbp will handle it appropriately.
+
+### Example
+```js
+function runQbp(items) {
+    qbp.create({
+        items: items,
+        async: true,
+        process: addItemToDatabase, // Required - Function of what you want to happen to each item. Gets passed the item and a callback function.
+        empty: emptyFunc // Optional - Function that gets called when we're out of items
+    });
+}
+
+async function addItemToDatabase(item, queue) {
+    var results = await _db.insert(item);
+
+    if (results.status === 'error') {
+        await logBadRecord(item);
+    }
+}
+
+async function logBadRecord(item) {
+    await _db.error(item);
+}
+
+function emptyFunc() {
+    console.log('Done!');
+}
+```
 
 ## Progress Updates
 You can supply a function when setting up your queue that will receive progress updates. The function will get an object.

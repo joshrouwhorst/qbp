@@ -3,7 +3,8 @@ function qbp(opts) {
         threads: 1,
         progressInterval: 10000,
         progress: noop,
-        empty: noop
+        empty: noop,
+        async: false
     };
 
     var _this = this;
@@ -91,6 +92,10 @@ function qbp(opts) {
         }
     }
 
+    function done() {
+        setupThreads();
+    }
+
     function setupThreads(newThread) {
         if (!newThread) {
             threadCount--;
@@ -100,7 +105,13 @@ function qbp(opts) {
         while(threadCount < opts.threads && queue.length > 0 && running) {
             threadCount++;
             var item = queue.splice(0, 1)[0];
-            opts.process(item, setupThreads, _this);
+
+            if (opts.async) {
+                opts.process(item, _this).then(done);
+            }
+            else {
+                opts.process(item, done, _this);
+            }
         }
 
         if (queue.length === 0 && running && threadCount === 0) {
