@@ -8,7 +8,8 @@ function qbp(items, each, opts) {
         progressInterval: 10000,
         progress: noop,
         empty: noop,
-        error: noop
+        error: noop,
+        debug: false
     };
 
     if (typeof each !== 'function') {
@@ -36,7 +37,8 @@ function qbp(items, each, opts) {
     this.resume = resume;
     this.pause = pause;
     this.add = add;
-    this.complete = [];
+    this.completed = [];
+    this.errors = [];
     this.counts = {
         items: itemCount,
         complete: completeCount,
@@ -49,17 +51,23 @@ function qbp(items, each, opts) {
         }
     }
 
+    // If no thread count is specified, process all items at once.
     if (opts.threads === null) opts.threads = items.length;
 
     if (items) {
         add(items, true);
     }
 
+    // If no each function given, return the queue object.
     if (!each) {
         queue.each = takeEach;
         return queue;
-    } else {
+    } else { // Otherwise, return the promise object from takeEach.
         return takeEach(each);
+    }
+
+    function log(msg) {
+        if (opts.debug) console.log(msg);
     }
 
     function updateCounts() {
@@ -154,13 +162,13 @@ function qbp(items, each, opts) {
     function threadComplete() {
         threadCount--;
         if (queueItems.length === 0 && running && threadCount === 0) {
-            console.log('Stopping');
+            log('Stopping');
             running = false;
             queue.status = 'empty';
             if (itemCount > 0) progress(true);
-            opts.empty();
-            console.log('Resolving');
-            _resolve();
+            opts.empty(queue);
+            log('Resolving');
+            _resolve(queue);
         }
     }
 
@@ -172,18 +180,22 @@ function qbp(items, each, opts) {
                 while (queueItems.length > 0 && running) {
                     var item = queueItems.splice(0, 1)[0];
                     item.status = 'running';
-                    console.log(`${item.id} Started`);
+                    log(`${item.id} Started`);
 
                     updateCounts();
                     
                     try {
                         await process(item.value, queue);
-                        console.log(`${item.id} Done`);
+                        log(`${item.id} Done`);
                         item.status = 'done';
-                        this.complete.push(item.value);
+                        queue.complete.push(item.value);
                     } catch (err) {
                         if (opts.error !== noop) opts.error(err, item.value, queue);
                         else console.error(err);
+                        queue.errors.push({
+                            error: err,
+                            item: item.value
+                        });
                     }
                     
                     completeCount++;

@@ -10,7 +10,8 @@ Have thousands of items you need to loop through performing asynchronous tasks s
   - [Contents](#contents)
   - [v2.x Documentation](#v2x-documentation)
     - [Full Options Example](#full-options-example)
-    - [Alternate Example](#alternate-example)
+    - [Getting the queue](#getting-the-queue)
+    - [Getting Completed and Error Items](#getting-completed-and-error-items)
     - [Progress Updates](#progress-updates)
       - [percent](#percent)
       - [queue](#queue)
@@ -18,7 +19,7 @@ Have thousands of items you need to loop through performing asynchronous tasks s
       - [total](#total)
       - [threads](#threads)
       - [queued](#queued)
-      - [name](#name)
+      - [name (deprecated in v2.x)](#name-deprecated-in-v2x)
       - [itemsPerSecond](#itemspersecond)
       - [secondsRemaining](#secondsremaining)
   - [v1.x Documentation](#v1x-documentation)
@@ -90,8 +91,7 @@ async function each(item, queue) { // You can also return a promise or provide a
     }
 }
 
-function progressFunc(prog) { // In Typescript, this parameter is a QbpProgress object
-    console.log('Name: ' + prog.name);
+function progressFunc(prog) { 
     console.log('Percent Complete: ' + prog.percent);
     console.log('Items Complete: ' + prog.complete);
     console.log('Total Items: ' + prog.total);
@@ -114,14 +114,40 @@ function errorFunc(err, item, queue) {
 }
 ```
 
-### Alternate Example
+### Getting the queue 
 
 ```js
 var globalQueue;
 
-async function start() {
+// This option gives you the queue after the process has ran.
+async function option1() {
+    globalQueue = await qbp(items, (item) => handler(item), { threads: 5 });
+}
+
+// This option is good if you need the queue object available immediately.
+async function option2() {
     globalQueue = qbp(items, { threads: 5 });
-    await qbp.each((item) => handler(item));
+    await globalQueue.each((item) => handler(item));
+}
+```
+
+The `queue` object is also passed to `each`, `error`, `progress`, and `empty` functions whenever they are called.
+
+### Getting Completed and Error Items
+
+If you need to, you can access all items that completed successfully (did not error out) after the queue finished through `queue.completed`. Similarly, you can access all items that errored through `queue.errors`, which gets an object with the error and the item.
+
+```js
+var queue = await qbp(items, (item) => handler(item));
+
+for (var i = 0; i < queue.completed.length; i++) {
+    var item = queue.completed[i];
+    // Do something with a completed item.
+}
+
+for (var i = 0; i < queue.errors.length; i++) {
+    var {error, item} = queue.errors[i];
+    // Do something with an error and item.
 }
 ```
 
@@ -153,7 +179,7 @@ How many threads are currently running.
 
 How many items have yet to be processed.
 
-#### name
+#### name (deprecated in v2.x)
 
 The name given to the queue when setup. Helps to differentiate between multiple queues running at the same time.
 
