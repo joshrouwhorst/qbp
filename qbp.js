@@ -1,22 +1,47 @@
-function qbp(opts) {
+function qbp(items, each, opts) {
+    if (!items || !(items instanceof Array)) {
+        throw Error('You must supply an array to qbp.');
+    }
+
     var options = {
-        threads: 1,
+        threads: null,
         progressInterval: 10000,
         progress: noop,
         empty: noop,
-        async: false
+        error: noop
     };
 
-    var _this = this;
+    if (typeof each !== 'function') {
+        opts = each;
+        each = null;
+    }
 
-    _this.status = 'waiting';
+    if (!opts) opts = {};
 
-    var queue = [];
+    var queue = this;
+
+    this.status = 'waiting';
+
+    var queueItems = [];
     var running = false;
     var itemCount = 0;
     var completeCount = 0;
     var threadCount = 0;
     var lastCompleteCount = 0;
+    var process = null;
+    var _resolve;
+    var _reject;
+
+    this.empty = empty;
+    this.resume = resume;
+    this.pause = pause;
+    this.add = add;
+    this.complete = [];
+    this.counts = {
+        items: itemCount,
+        complete: completeCount,
+        threads: threadCount
+    };
 
     for (var key in options) {
         if (opts[key] === undefined) {
@@ -24,33 +49,67 @@ function qbp(opts) {
         }
     }
 
-    if (opts.items) {
-        add(opts.items);
+    if (opts.threads === null) opts.threads = items.length;
+
+    if (items) {
+        add(items, true);
     }
 
-    function add(itemOrArray) {
+    if (!each) {
+        queue.each = takeEach;
+        return queue;
+    } else {
+        return takeEach(each);
+    }
+
+    function updateCounts() {
+        queue.counts.total = itemCount;
+        queue.counts.complete = completeCount;
+        queue.counts.queued = queueItems.length;
+        queue.counts.threads = threadCount;
+    }
+
+    function takeEach(func) {
+        process = func;
+
+        return new Promise(async (resolve, reject) => {
+            try {
+                _resolve = resolve;
+                _reject = reject;
+                queue.resume();
+            } catch (err) {
+                reject(err);
+            }
+        });
+    }
+
+    function add(itemOrArray, dontResume) {
         if (itemOrArray instanceof Array) {
-            itemCount += itemOrArray.length;
-            queue = queue.concat(queue, itemOrArray);
+            //queueItems = queueItems.concat(queueItems, itemOrArray);
+            for (let i = 0; i < itemOrArray.length; i++) {
+                const itemValue = itemOrArray[i];
+                const item = new Item(itemValue, ++itemCount);
+                queueItems.push(item);
+            }
         }
         else {
-            itemCount++;
-            queue.push(itemOrArray);
+            var item = new Item(item, ++itemCount);
+            queueItems.push(item);
         }
 
-        resume(true);
+        if (!dontResume) resume(true);
     }
 
     function empty() {
-        queue.length = 0;
+        queueItems.length = 0;
     }
 
     function resume(newItem) {
-        if (!running && (!newItem || _this.status !== 'paused')) {
+        if (!running && (!newItem || queue.status !== 'paused')) {
             running = true;
-            _this.status = 'running';
+            queue.status = 'running';
             setupThreads(true);
-            if (queue.length > 0 || completeCount < itemCount) {
+            if (queueItems.length > 0 || completeCount < itemCount) {
                 progress();
             }
         }
@@ -58,7 +117,7 @@ function qbp(opts) {
 
     function pause() {
         running = false;
-        _this.status = 'paused';
+        queue.status = 'paused';
     }
 
     function progress(once) {
@@ -78,10 +137,10 @@ function qbp(opts) {
             secondsRemaining = -1;
         }
         else {
-            secondsRemaining = Math.ceil(queue.length / itemsPerSecond);
+            secondsRemaining = Math.ceil(queueItems.length / itemsPerSecond);
         }
 
-        var obj = new QbpProgress(perc, completeCount, itemCount, threadCount, queue.length, opts.name, itemsPerSecond, secondsRemaining, _this);
+        var obj = new QbpProgress(perc, completeCount, itemCount, threadCount, queueItems.length, itemsPerSecond, secondsRemaining, queue);
 
         opts.progress(obj);
 
@@ -92,47 +151,57 @@ function qbp(opts) {
         }
     }
 
-    function done() {
-        setupThreads();
-    }
-
-    function setupThreads(newThread) {
-        if (!newThread) {
-            threadCount--;
-            completeCount++;
-        }
-
-        while(threadCount < opts.threads && queue.length > 0 && running) {
-            threadCount++;
-            var item = queue.splice(0, 1)[0];
-
-            if (opts.async) {
-                opts.process(item, _this).then(done);
-            }
-            else {
-                opts.process(item, done, _this);
-            }
-        }
-
-        if (queue.length === 0 && running && threadCount === 0) {
+    function threadComplete() {
+        threadCount--;
+        if (queueItems.length === 0 && running && threadCount === 0) {
+            console.log('Stopping');
             running = false;
-            _this.status = 'empty';
+            queue.status = 'empty';
             if (itemCount > 0) progress(true);
             opts.empty();
+            console.log('Resolving');
+            _resolve();
         }
     }
 
-    this.empty = empty;
-    this.resume = resume;
-    this.pause = pause;
-    this.add = add;
-};
+    function setupThreads() {
+        while(threadCount < opts.threads) {
+            threadCount++;
+            
+            (async () => {
+                while (queueItems.length > 0 && running) {
+                    var item = queueItems.splice(0, 1)[0];
+                    item.status = 'running';
+                    console.log(`${item.id} Started`);
 
-qbp.create = function (opts) {
-    return new qbp(opts);
+                    updateCounts();
+                    
+                    try {
+                        await process(item.value, queue);
+                        console.log(`${item.id} Done`);
+                        item.status = 'done';
+                        this.complete.push(item.value);
+                    } catch (err) {
+                        if (opts.error !== noop) opts.error(err, item.value, queue);
+                        else console.error(err);
+                    }
+                    
+                    completeCount++;
+                }
+                
+                threadComplete();
+            })();
+        }
+    }
 }
 
-function QbpProgress(perc, complete, total, threads, queued, name, itemsPerSecond, secondsRemaining, queue) {
+function Item(value, itemCount) {
+    this.value = value;
+    this.status = 'queued';
+    this.id = itemCount;
+}
+
+function QbpProgress(perc, complete, total, threads, queued, itemsPerSecond, secondsRemaining, queue) {
     this.percent = perc;
     this.complete = complete;
     this.total = total;
@@ -141,15 +210,8 @@ function QbpProgress(perc, complete, total, threads, queued, name, itemsPerSecon
     this.itemsPerSecond = itemsPerSecond
     this.queue = queue;
     this.secondsRemaining = secondsRemaining;
-
-    if (name) {
-        this.name = name;
-    }
 }
 
 function noop() {};
 
-module.exports = {
-    qbp: qbp,
-    QbpProgress: QbpProgress
-};
+module.exports = qbp;
