@@ -150,11 +150,15 @@ An interesting application of this plugin is using it to throttle processing of 
 
 ```js
 // Create a queue with an each function, the maximum number of threads you want to run at a time, and an empty function.
-var processQueue = qbp((item) => processNewItems(item), { threads: 20, empty: () => itemsEmpty() });
+var processQueue = qbp((item) => each(item), { threads: 20, empty: () => itemsEmpty() });
 
 async function processNewItems(newItems) {
     // Add the new items to be processed. It'll restart the queue if it's already been empty.
     processQueue.add(newItems);
+}
+
+async function each(item) {
+    // Do something with the item.
 }
 
 function itemsEmpty() {
