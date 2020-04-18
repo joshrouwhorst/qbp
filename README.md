@@ -9,7 +9,10 @@ Have thousands of items you need to loop through performing asynchronous tasks s
 - [qbp - queue, batch, process](#qbp---queue-batch-process)
   - [Contents](#contents)
   - [v2.x Documentation](#v2x-documentation)
+    - [Usage](#usage)
     - [Full Options Example](#full-options-example)
+    - [Batching](#batching)
+    - [Throttling](#throttling)
     - [Getting the queue](#getting-the-queue)
     - [Getting Completed and Error Items](#getting-completed-and-error-items)
     - [Progress Updates](#progress-updates)
@@ -18,6 +21,7 @@ Have thousands of items you need to loop through performing asynchronous tasks s
       - [complete](#complete)
       - [total](#total)
       - [threads](#threads)
+      - [batch](#batch)
       - [queued](#queued)
       - [name (deprecated in v2.x)](#name-deprecated-in-v2x)
       - [itemsPerSecond](#itemspersecond)
@@ -37,13 +41,15 @@ Have thousands of items you need to loop through performing asynchronous tasks s
 
 ## v2.x Documentation
 
-I made some pretty significant changes to the qbp 'footprint'. Say goodbye to the bulky code, say hello to streamlined batchy goodness.
+### Usage
+
+I made some pretty significant changes to the qbp 'footprint' in v2. Say goodbye to the bulky code, say hello to streamlined batchy goodness.
 
 ``` js
 await qbp(items, (item) => handler(item));
 ```
 
-This is all you really need. You can obviously also forego `await` for `then()`.
+This is all you really need. Or you can obviously forego `await` for `then()`.
 
 ```js
 qbp(items, (item) => handler(item))
@@ -53,7 +59,7 @@ qbp(items, (item) => handler(item))
 The constructor breaks down like this:
 
 ```js
-qbp(<array>, [function,] [options])
+qbp([array,] [function,] [options])
 ```
 
 ### Full Options Example
@@ -67,6 +73,7 @@ async function start(someItemsToProcess) {
         (item, queue) => each(item, queue),
         {
             threads: 5, // Default is now the total count of items you initially provide, running all of them simultaneously.
+            batch: 10, // Default 1 - Anything above 1 will pass that many items as an array to your `each` function.
             progress: (prog) => progressFunc(prog), // Function that gets called with status updates on how the process is going
             progressInterval: 1000, // Default 10000 - How often to get status updates in milliseconds
             empty: () => emptyFunc(), // Function that gets called when we're out of items
@@ -78,7 +85,7 @@ async function start(someItemsToProcess) {
 // This function will receive the current item in the items array,
 // and the instance of the queue you created.
 async function each(item, queue) { // You can also return a promise or provide a typical function.
-    var results = await _db.insert(item);
+    var results = await _db.insert(item); // If your `batch` option was greater than 1 then this function gets an array of items passed to it.
 
     if (checkSomething) {
         queue.empty(); // Clears out all queued items.
@@ -86,17 +93,20 @@ async function each(item, queue) { // You can also return a promise or provide a
         queue.pause(); // Temporarily stops processing items.
     } else if (yetAnotherCheck) {
         queue.resume(); // Starts a queue back up after being paused.
+    } else if (oneMore) {
+        queue.theads(queue.counts.threads + 1) // Change the number of threads on the fly.
     } else if (lastCheck) {
         queue.add(results); // Add more items to the queue at any time. Even after it's already completed if you supply an `empty` function in the options.
     }
 }
 
-function progressFunc(prog) { 
+function progressFunc(prog) {
     console.log('Percent Complete: ' + prog.percent);
     console.log('Items Complete: ' + prog.complete);
     console.log('Total Items: ' + prog.total);
     console.log('Queued Items: ' + prog.queued);
     console.log('Threads: ' + prog.threads);
+    console.log('Batch Size: ' + prog.batch);
     console.log('Items Per Second: ' + prog.itemsPerSecond);
     console.log('Seconds Remaining: ' + prog.secondsRemaining);
 }
@@ -114,7 +124,45 @@ function errorFunc(err, item, queue) {
 }
 ```
 
-### Getting the queue 
+### Batching
+
+I finally actually created a batching system into queue, batch, process.
+
+```js
+async function start() {
+    var queue = await qbp(items, (batch) => each(batch), { batch: 5 }); // Set your batch size in the options.
+}
+
+// Instead of a single item, you recieve an array of items.
+async function each(batch) {
+    var ids = [];
+    for (var i = 0; i < batch.length; i++) {
+        ids.push(batch[i].id);
+    }
+
+    await httpSvc.getDetails(ids);
+}
+```
+
+### Throttling
+
+An interesting application of this plugin is using it to throttle processing of items. For instance, if you have a project that is constantly taking in new data to be processed and you want to process some of them concurrently but want to cap the number that get processed at once. You might want to try something like this.
+
+```js
+// Create a queue with an each function, the maximum number of threads you want to run at a time, and an empty function.
+var processQueue = qbp((item) => processNewItems(item), { threads: 20, empty: () => itemsEmpty() });
+
+async function processNewItems(newItems) {
+    // Add the new items to be processed. It'll restart the queue if it's already been empty.
+    processQueue.add(newItems);
+}
+
+function itemsEmpty() {
+    // This gets called every time the queue runs out of items.
+}
+```
+
+### Getting the queue
 
 ```js
 var globalQueue;
@@ -135,16 +183,18 @@ The `queue` object is also passed to `each`, `error`, `progress`, and `empty` fu
 
 ### Getting Completed and Error Items
 
-If you need to, you can access all items that completed successfully (did not error out) after the queue finished through `queue.completed`. Similarly, you can access all items that errored through `queue.errors`, which gets an object with the error and the item.
+If you need to, you can access all items that completed successfully (did not error out) after the queue finished through `queue.complete`. Similarly, you can access all items that errored through `queue.errors`, which gets an object with the error and the item.
 
 ```js
 var queue = await qbp(items, (item) => handler(item));
 
-for (var i = 0; i < queue.completed.length; i++) {
-    var item = queue.completed[i];
+// Items in `complete` will be an array of items if your batch option is greater than 1.
+for (var i = 0; i < queue.complete.length; i++) {
+    var item = queue.complete[i];
     // Do something with a completed item.
 }
 
+// Items in `errors` will be an array of items if your batch option is greater than 1.
 for (var i = 0; i < queue.errors.length; i++) {
     var {error, item} = queue.errors[i];
     // Do something with an error and item.
@@ -174,6 +224,10 @@ How many items have been added to the queue.
 #### threads
 
 How many threads are currently running.
+
+#### batch
+
+The max size of each batch getting passed to the `each` function.
 
 #### queued
 
