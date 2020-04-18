@@ -24,7 +24,7 @@ function qbp(items, each, opts) {
         progress: noop,
         empty: noop,
         error: noop,
-        debug: true
+        debug: false
     };
 
     // Merge default options into their options.
