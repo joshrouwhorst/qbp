@@ -2,7 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/qbp.svg)](https://badge.fury.io/js/qbp)
 
-Have thousands of items you need to loop through performing asynchronous tasks such as database or server calls? Trying to find a way to easily limit the concurrent number of calls and keep them all straight? Wishing you had a tool to queue, batch, and process all these items? This package may be right for you!
+Have thousands of items you need to loop through performing asynchronous tasks such as database or server calls? Trying to find a way to easily limit the number of simultaneous functions and keep them all straight? Wishing you had a tool to queue, batch, and process all these items? This package may be right for you!
 
 ## Contents
 
@@ -13,8 +13,9 @@ Have thousands of items you need to loop through performing asynchronous tasks s
     - [Full Options Example](#full-options-example)
     - [Batching](#batching)
     - [Throttling](#throttling)
-    - [Getting the queue](#getting-the-queue)
-    - [Getting Completed and Error Items](#getting-completed-and-error-items)
+    - [Mixing](#mixing)
+    - [Getting the Queue](#getting-the-queue)
+    - [Error Handling and Completed Items](#error-handling-and-completed-items)
     - [Progress Updates](#progress-updates)
       - [percent](#percent)
       - [queue](#queue)
@@ -23,7 +24,7 @@ Have thousands of items you need to loop through performing asynchronous tasks s
       - [threads](#threads)
       - [batch](#batch)
       - [queued](#queued)
-      - [name (deprecated in v2.x)](#name-deprecated-in-v2x)
+      - [name](#name)
       - [itemsPerSecond](#itemspersecond)
       - [secondsRemaining](#secondsremaining)
   - [v1.x Documentation](#v1x-documentation)
@@ -46,13 +47,13 @@ Have thousands of items you need to loop through performing asynchronous tasks s
 I made some pretty significant changes to the qbp 'footprint' in v2. Say goodbye to the bulky code, say hello to streamlined batchy goodness.
 
 ``` js
-await qbp(items, (item) => handler(item));
+await qbp(items, (item) => each(item));
 ```
 
-This is all you really need. Or you can obviously forego `await` for `then()`.
+This is all you really need. It will loop through `items` and will asyncronously pass every item to your `each` function and await its completion. Or you can obviously forego `await` for `then()`.
 
 ```js
-qbp(items, (item) => handler(item))
+qbp(items, (item) => each(item))
     .then(() => nextStep());
 ```
 
@@ -62,21 +63,25 @@ The constructor breaks down like this:
 qbp([array,] [function,] [options])
 ```
 
+> **Pro Tip:** The way I'm parsing parameters allows you to enter these in any order.
+> It just looks for an array, a function, and an object.
+
 ### Full Options Example
 
 ```js
 var qbp = require('qbp');
 
-async function start(someItemsToProcess) {
+async function start(items) {
     await qbp(
-        someItemsToProcess,
+        items,
         (item, queue) => each(item, queue),
         {
-            threads: 5, // Default is now the total count of items you initially provide, running all of them simultaneously.
+            threads: 5, // How many items you want to process simultaneously. Default is now the total count of items you initially provide, running them all at once.
             batch: 10, // Default 1 - Anything above 1 will pass that many items as an array to your `each` function.
-            progress: (prog) => progressFunc(prog), // Function that gets called with status updates on how the process is going
-            progressInterval: 1000, // Default 10000 - How often to get status updates in milliseconds
-            empty: () => emptyFunc(), // Function that gets called when we're out of items
+            name: 'Demo Queue', // An identifier you can use to differentiate multiple queues. Does not need to be a string.
+            progress: (prog) => progressFunc(prog), // Function that gets called with status updates on how the process is going.
+            progressInterval: 1000, // Default 10000 - How often to get status updates in milliseconds.
+            empty: () => emptyFunc(), // Function that gets called when we're out of items.
             error: (err, item, queue) => errorFunc(err, item, queue) // Gets called if an error is thrown by your `each` function. If this isn't supplied, errors will output to console.error().
         }
     );
@@ -84,7 +89,7 @@ async function start(someItemsToProcess) {
 
 // This function will receive the current item in the items array,
 // and the instance of the queue you created.
-async function each(item, queue) { // You can also return a promise or provide a typical function.
+async function each(item, queue) { // You can also return a promise or provide a non-asynchronous function.
     var results = await _db.insert(item); // If your `batch` option was greater than 1 then this function gets an array of items passed to it.
 
     if (checkSomething) {
@@ -96,11 +101,11 @@ async function each(item, queue) { // You can also return a promise or provide a
     } else if (oneMore) {
         queue.theads(queue.counts.threads + 1) // Change the number of threads on the fly.
     } else if (lastCheck) {
-        queue.add(results); // Add more items to the queue at any time. Even after it's already completed if you supply an `empty` function in the options.
+        queue.add(results); // Add more items to the queue at any time. Even after it's already completed.
     }
 }
 
-function progressFunc(prog) {
+function progressFunc(prog, queue) {
     console.log('Percent Complete: ' + prog.percent);
     console.log('Items Complete: ' + prog.complete);
     console.log('Total Items: ' + prog.total);
@@ -109,9 +114,10 @@ function progressFunc(prog) {
     console.log('Batch Size: ' + prog.batch);
     console.log('Items Per Second: ' + prog.itemsPerSecond);
     console.log('Seconds Remaining: ' + prog.secondsRemaining);
+    console.log('Queue Name: ' + prog.name); // Only if a name has been given in the options.
 }
 
-// If you add more items to the queue after it's already completed, the empty function will get called every time you run out of items.
+// If you use queue.add() to add more items after the queue has already completed, the empty function will get called every time you run out of items.
 function emptyFunc() {
     console.log('Done!');
 }
@@ -126,7 +132,7 @@ function errorFunc(err, item, queue) {
 
 ### Batching
 
-I finally actually created a batching system into queue, batch, process.
+Need to get a few items at a time? Use the `batch` option.
 
 ```js
 async function start() {
@@ -146,11 +152,13 @@ async function each(batch) {
 
 ### Throttling
 
-An interesting application of this plugin is using it to throttle processing of items. For instance, if you have a project that is constantly taking in new data to be processed and you want to process some of them concurrently but want to cap the number that get processed at once. You might want to try something like this.
+An interesting application of this package is using it to throttle processing of items. For instance, if you have a project that is constantly taking in new data to be processed and you want to cap the number that get processed at once, you might want to try something like this.
 
 ```js
 // Create a queue with an each function, the maximum number of threads you want to run at a time, and an empty function.
-var processQueue = qbp((item) => each(item), { threads: 20, empty: () => itemsEmpty() });
+var processQueue = qbp((item) => each(item), {
+        threads: 20,
+        empty: () => itemsEmpty() });
 
 async function processNewItems(newItems) {
     // Add the new items to be processed. It'll restart the queue if it's already been empty.
@@ -166,7 +174,60 @@ function itemsEmpty() {
 }
 ```
 
-### Getting the queue
+### Mixing
+
+I found myself nesting queues whenever I needed to loop through multiple arrays. So I added a `mix` function to help with this. Here's what I **was** doing.
+
+```js
+// Honestly, I'm not sure how you would effeciently cap threads on this.
+await qbp(teachers, (teacher) => {
+    await qbp(classRooms, (classRoom) => {
+        await qbp(students, (student) => {
+            await addStudent(teacher, classRoom, student);
+        });
+    });
+});
+
+async function addStudent(teacher, classRoom, student) {
+    // No one likes to nest stuff.
+}
+```
+
+So instead, now we can use the `qbp.mix()` function.
+
+```js
+// Now we can definitely cap the threads if we want.
+await qbp.mix([teachers, classRooms, students], (...args) => addStudent(...args), { threads: 5 });
+
+async function addStudent(teacher, classRoom, student, queue) {
+    // The parameters mirror the same order you gave them to qbp.
+}
+```
+
+So if you had an arrays such as:
+
+```js
+var teachers = ['Mrs. Robinson', 'Mr. Knox', 'Mr. Anderson'];
+var classRooms = [102, 203];
+var students = ['Billy', 'Jane'];
+```
+
+The `each` function would get called with every combination of those.
+
+```js
+function each(teacher, classRoom, student, queue) {
+    // 'Mrs. Robinson', 102, 'Billy'
+    // 'Mrs. Robinson', 102, 'Jane'
+    // 'Mrs. Robinson', 203, 'Billy'
+    // 'Mrs. Robinson', 203, 'Jane'
+    // 'Mr. Knox', 102, 'Billy'
+    // etc...
+}
+```
+
+> One thing to keep in mind. You only have one `queue` object using this. The `queue.add()` function won't perform the mixing functionality that you get when you pass it in to the `mix()` function. But if you don't need to add any more items while processing, then this works perfect.
+
+### Getting the Queue
 
 ```js
 var globalQueue;
@@ -185,9 +246,9 @@ async function option2() {
 
 The `queue` object is also passed to `each`, `error`, `progress`, and `empty` functions whenever they are called.
 
-### Getting Completed and Error Items
+### Error Handling and Completed Items
 
-If you need to, you can access all items that completed successfully (did not error out) after the queue finished through `queue.complete`. Similarly, you can access all items that errored through `queue.errors`, which gets an object with the error and the item.
+If you need to, you can access all items that completed successfully (did not error out) after or throughout processing with `queue.complete`. Similarly, you can access all items that errored with `queue.errors`, which gets an object with the error and the item.
 
 ```js
 var queue = await qbp(items, (item) => handler(item));
@@ -205,9 +266,22 @@ for (var i = 0; i < queue.errors.length; i++) {
 }
 ```
 
+Also, don't forget you can pass an `error` function in the options.
+
+```js
+await qbp(items, (item) => each(item), {
+    error: (...errInfo) => onError(...errInfo) });
+
+functon onError(error, item, queue) {
+    // If you're using qbp.mix() then you'll get arguments spread out, such as (error, item1, item2, item3, queue)
+}
+```
+
+If you don't supply an `error` function and your `each` function throws an error, it will get output to `console.error()`. So it's recommended to use proper error handling in your `each` function.
+
 ### Progress Updates
 
-You can supply a function when setting up your queue that will receive progress updates. The function will get an object.
+You can supply a `progress` function in your queue options that will receive progress updates, allowing you to create progress bars and status updates to the user. The function will get an object with these attributes.
 
 #### percent
 
@@ -237,7 +311,7 @@ The max size of each batch getting passed to the `each` function.
 
 How many items have yet to be processed.
 
-#### name (deprecated in v2.x)
+#### name
 
 The name given to the queue when setup. Helps to differentiate between multiple queues running at the same time.
 
@@ -247,7 +321,7 @@ Average number of items that have been processed within a second since last time
 
 #### secondsRemaining
 
-Estimated number of seconds left to process the queue based on `QbpProgress.itemsPerSecond`.
+Estimated number of seconds left to process the queue based on `itemsPerSecond`. If, for some reason, `itemsPerSecond` is `0`, this will be `-1` to signify we can't currently estimate time left. For instance, the first time the `progress` function gets called `secondsRemaining` will be set to `-1`.
 
 -----------
 

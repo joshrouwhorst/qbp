@@ -1,26 +1,14 @@
 function qbp(items, each, opts) {
-    // Figuring out which arguments are which.
-    if (!opts && each && typeof each !== 'function') {
-        opts = each;
-        each = null;
-    }
-    else if (!opts && items && !(items instanceof Array) && typeof items !== 'function') {
-        opts = items;
-        items = null;
-    }
-
-    if (!each && items && typeof items === 'function') {
-        each = items;
-        items = null;
-    }
-
-    if (!opts) opts = {};
+    
+    var { items, each, opts } = parseArgs(items, each, opts);
 
     // Set the default options.
     var options = {
+        name: null,
         threads: null,
         progressInterval: 10000,
         batch: 1,
+        spreadItem: false,
         progress: noop,
         empty: noop,
         error: noop,
@@ -46,10 +34,11 @@ function qbp(items, each, opts) {
     var _reject;
 
     // Create the queue object;
-    var queue = {};
+    var queue = new Queue();
 
     // Set exposed properties/functions on the queue object.
-    queue.status = 'waiting';
+    queue.name = opts.name;
+    queue.status = 'initializing';
     queue.empty = empty;
     queue.resume = resume;
     queue.pause = pause;
@@ -68,6 +57,9 @@ function qbp(items, each, opts) {
     // If no thread count is specified, process all items at once.
     if (opts.threads === null && items) opts.threads = items.length;
 
+    var returnValue = null;
+
+    
     if (items) {
         add(items);
     }
@@ -75,12 +67,17 @@ function qbp(items, each, opts) {
     // If no each function given, return the queue object.
     if (!each) {
         queue.each = setEach;
-        return queue;
+        returnValue = queue;
     } else if (!items) { // Haven't supplied items yet, so just return the queue.
-        return queue;
+        returnValue = queue;
     } else { // Otherwise, return the promise object from takeEach.
-        return setEach(each);
+        returnValue = setEach(each);
     }
+
+    // Make sure we can tell the difference between when we're initially setting up the queue,
+    // and when it has already digested all of the parameters. 
+    queue.status = 'waiting';
+    return returnValue;
 
     // For debugging purposes
     function log(msg) {
@@ -124,18 +121,20 @@ function qbp(items, each, opts) {
         // Can take a single item or an array of items.
         if (itemOrArray instanceof Array) {
             itemCount += itemOrArray.length;
-            queueItems = queueItems.concat(queueItems, itemOrArray);
+            queueItems = queueItems.concat(itemOrArray);
         }
         else {
             itemCount++
             queueItems.push(itemOrArray);
         }
 
+        updateCounts();
+
         // They didn't manually set threads and didn't pass in items, now we set threads to the first itemCount we're given.
         if (opts.threads === null) opts.threads = itemCount;
 
         // They passed in the each without items. Now that we have items, set the process.
-        if (each && !process) setEach(each); 
+        if (queue.status !== 'initializing' && each && !process) setEach(each); 
 
         // If we have an each function and set it to process, make sure that we're running the queue.
         if (process) resume(true);
@@ -203,6 +202,7 @@ function qbp(items, each, opts) {
         // Check if we're completely done processing.
         if (queueItems.length === 0 && running && threadCount === 0) {
             log('Stopping');
+            updateCounts();
             running = false;
             queue.status = 'empty';
 
@@ -239,14 +239,16 @@ function qbp(items, each, opts) {
                     
                     try {
                         // Call the each function.
-                        await process(item.value, queue);
+                        if (opts.spreadItem) await process(...item.value, queue);
+                        else await process(item.value, queue);
                         log(`${item.id} Done`);
 
                         // Keep track of completed items.
                         queue.complete.push(item.value);
                     } catch (err) {
                         // If they have an error function call that, otherwise output to console.
-                        if (opts.error !== noop) opts.error(err, item.value, queue);
+                        if (opts.error !== noop && opts.spreadItem) opts.error(err, ...item.value, queue);
+                        else if (opts.error !== noop) opts.error(err, item.value, queue);
                         else console.error(err);
 
                         // Keep track of items that had errors.
@@ -268,6 +270,45 @@ function qbp(items, each, opts) {
     }
 }
 
+function Queue() {
+    this.name = null;
+    this.status = null;
+    this.empty = null;
+    this.resume = null;
+    this.pause = null;
+    this.add = null;
+    this.threads = null;
+    this.complete = null;
+    this.errors = null;
+    this.counts = null;
+}
+
+function parseArgs (...args) {
+    // Figuring out which arguments are which.
+    var items = args.find((arg) => Array.isArray(arg));
+    var each = args.find((arg) => typeof arg === 'function');
+    var opts = args.find((arg) => arg !== items && arg !== each);
+
+    if (!opts) opts = {};
+
+    return { items, each, opts };
+}
+
+// Allows you to loop through multiple arrays at once.
+qbp.mix = function mix(items, ...args) {
+    items = qbp.cartesian(items);
+    var modArgs = parseArgs(items, ...args);
+    modArgs.opts.spreadItem = true;
+    return qbp(modArgs.items, modArgs.each, modArgs.opts);
+}
+
+// Using cartesian product to mix two or more arrays.
+qbp.cartesian = function cartesian(arr) {
+    let f = (a, b) => [].concat(...a.map(a => b.map(b => [].concat(a, b))));
+    let k = (a, b, ...c) => b ? k(f(a, b), ...c) : a;
+    return k(...arr);
+}
+
 function Batch(value, id) {
     this.value = value;
     this.id = id;
@@ -283,6 +324,10 @@ function QbpProgress(perc, complete, total, threads, queued, itemsPerSecond, sec
     this.batch = batchSize;
     this.queue = queue;
     this.secondsRemaining = secondsRemaining;
+
+    if (queue.name) {
+        this.name = queue.name;
+    }
 }
 
 function noop() {};
