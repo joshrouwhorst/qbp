@@ -13,20 +13,34 @@ Have thousands of items you need to loop through performing asynchronous tasks s
     - [Full Options Example](#full-options-example)
     - [Batching](#batching)
     - [Throttling](#throttling)
+    - [Rate Limiting](#rate-limiting)
+      - [Example](#example)
     - [Mixing](#mixing)
-    - [Getting the Queue](#getting-the-queue)
     - [Error Handling and Completed Items](#error-handling-and-completed-items)
+    - [Getting the Queue](#getting-the-queue)
+    - [Queue Object](#queue-object)
+      - [queue.name](#queuename)
+      - [queue.empty()](#queueempty)
+      - [queue.pause()](#queuepause)
+      - [queue.add([item][arrayOfItems])](#queueadditem)
+      - [queue.addAwait([item])](#queueaddawaititem)
+      - [queue.threads([int])](#queuethreadsint)
+      - [queue.rateLimit([rateLimit, rateLimitSeconds, [rateFidelity]])](#queueratelimitratelimit-ratelimitseconds-ratefidelity)
+      - [queue.stopRateLimit()](#queuestopratelimit)
+      - [queue.complete[]](#queuecomplete)
+      - [queue.errors[]](#queueerrors)
+      - [queue.counts](#queuecounts)
     - [Progress Updates](#progress-updates)
-      - [percent](#percent)
-      - [queue](#queue)
-      - [complete](#complete)
-      - [total](#total)
-      - [threads](#threads)
-      - [batch](#batch)
-      - [queued](#queued)
-      - [name](#name)
-      - [itemsPerSecond](#itemspersecond)
-      - [secondsRemaining](#secondsremaining)
+      - [update.percent](#updatepercent)
+      - [update.queue](#updatequeue)
+      - [update.complete](#updatecomplete)
+      - [update.total](#updatetotal)
+      - [update.threads](#updatethreads)
+      - [update.batch](#updatebatch)
+      - [update.queued](#updatequeued)
+      - [update.name](#updatename)
+      - [update.itemsPerSecond](#updateitemspersecond)
+      - [update.secondsRemaining](#updatesecondsremaining)
   - [v1.x Documentation](#v1x-documentation)
     - [v1.x - Usage](#v1x---usage)
     - [v1.x - Full Options Example](#v1x---full-options-example)
@@ -79,6 +93,11 @@ async function start(items) {
             threads: 5, // How many items you want to process simultaneously. Default is now the total count of items you initially provide, running them all at once.
             batch: 10, // Default 1 - Anything above 1 will pass that many items as an array to your `each` function.
             name: 'Demo Queue', // An identifier you can use to differentiate multiple queues. Does not need to be a string.
+            rateLimit: 500, // Set a maximum number of items that can be processed within rateLimitSeconds.
+            rateLimitSeconds: 100, // The timeframe for rate limiting.
+            rateFidelity: 20, // Default 16 - How many times you want rate limiting to be checked and adjusted during rateLimitSeconds timeframe.
+            rateLimitOnEmpty: true, // Default false - Set this to true to have rate limiting keep going even when there are no items in the queue.
+            rateUpdate: (update) => rateUpdate(update),
             progress: (prog) => progressFunc(prog), // Function that gets called with status updates on how the process is going.
             progressInterval: 1000, // Default 10000 - How often to get status updates in milliseconds.
             empty: () => emptyFunc(), // Function that gets called when we're out of items.
@@ -105,7 +124,7 @@ async function each(item, queue) { // You can also return a promise or provide a
     }
 }
 
-function progressFunc(prog, queue) {
+function progressFunc(prog) {
     console.log('Percent Complete: ' + prog.percent);
     console.log('Items Complete: ' + prog.complete);
     console.log('Total Items: ' + prog.total);
@@ -120,6 +139,17 @@ function progressFunc(prog, queue) {
 // If you use queue.add() to add more items after the queue has already completed, the empty function will get called every time you run out of items.
 function emptyFunc() {
     console.log('Done!');
+}
+
+function rateUpdate(update) {
+    update.queue; // The queue object.
+    update.projectedCount; // The number of items we're projecting to process at the current rate by next update.
+    update.projectedRate; // The items per second rate we're projecting by next process
+    update.minimumThreadtime; // The minimum amount of time a thread is allowed to run to meet rate limiting expectations, in milliseconds.
+    update.currentThreads; // The current number of threads running.
+    update.targetThreads; // The number of threads we're adjusting to.
+    update.currentRatePerSecond; // The number of items we processed per second since the last update.
+    update.currentThreadRate; // The number of items per second each thread is averaging.
 }
 
 // If your `each` function throws an error, it won't stop the queue from processing. However, you can stop the queue in the error function if you'd like by calling queue.empty() or queue.pause().
@@ -167,6 +197,57 @@ async function processNewItems(newItems) {
 
 async function each(item) {
     // Do something with the item.
+}
+
+function itemsEmpty() {
+    // This gets called every time the queue runs out of items.
+}
+```
+
+### Rate Limiting
+
+If you need to limit processing your items by a number of items within a timeframe then this should help. Rate limiting adjusts the number of threads running simultaneously and makes sure each item takes a minimum amount of time to process in order to meet limit expectations.
+
+In the options object you pass to `qbp` you can set `rateLimit` which is the maximum number of items allowed to process within the a time frame, `rateLimitSeconds` which is that timeframe in seconds, `rateUpdate` which is a function that can get called with updates every time the rate limit check runs, and `rateFidelity` which is how often you want the rate limiting check to run within `rateLimitSeconds`. So a fidelity of 16 (which is the default value) in with a `rateLimitSeconds` of 3600 would check and adjust the rate limiting every 225 seconds, running 16 times in 3600 seconds.
+
+At any time you can add rate limiting to a queue by calling `queue.rateLimit()` and passing in the `rateLimit`, `rateLimitSeconds`, and `rateFidelity` values.
+
+Also, at any time you can stop rate limiting by calling `queue.stopRateLimit()`.
+
+> **Important note!** Rate limiting hijacks your `threads` setting and automatically adjusts it to get the most items processed while remaining within your limits.
+
+#### Example
+
+Modifying the Throttling example above, here's how you could do it with rate limiting.
+
+```js
+// Create a queue with an each function, the maximum number of threads you want to run at a time, and an empty function.
+var processQueue = qbp((item) => each(item), {
+        rateLimit: 500, // Need rateLimit and rateLimitSeconds for rate limiting to work, all other options are not necessary.
+        rateLimitSeconds: 100,
+        rateFidelity: 20,
+        rateLimitOnEmpty: true, // If you're expecting items to constantly be getting added to your queue and have it sporadically be empty then this is a good option to have on for accuracy.
+        rateUpdate: (update) => rateUpdate(upate),
+        empty: () => itemsEmpty() });
+
+async function processNewItems(newItems) {
+    // Add the new items to be processed. It'll restart the queue if it's already been empty.
+    processQueue.add(newItems);
+}
+
+async function each(item) {
+    // Do something with the item.
+}
+
+function rateUpdate(update) {
+    update.queue; // The queue object.
+    update.projectedCount; // The number of items we're projecting to process at the current rate by next update.
+    update.projectedRate; // The items per second rate we're projecting by next process
+    update.minimumThreadtime; // The minimum amount of time a thread is allowed to run to meet rate limiting expectations, in milliseconds.
+    update.currentThreads; // The current number of threads running.
+    update.targetThreads; // The number of threads we're adjusting to.
+    update.currentRatePerSecond; // The number of items we processed per second since the last update.
+    update.currentThreadRate; // The number of items per second each thread is averaging.
 }
 
 function itemsEmpty() {
@@ -227,25 +308,6 @@ function each(teacher, classRoom, student, queue) {
 
 > One thing to keep in mind. You only have one `queue` object using this. The `queue.add()` function won't perform the mixing functionality that you get when you pass it in to the `mix()` function. But if you don't need to add any more items while processing, then this works perfect.
 
-### Getting the Queue
-
-```js
-var globalQueue;
-
-// This option gives you the queue after the process has ran.
-async function option1() {
-    globalQueue = await qbp(items, (item) => handler(item), { threads: 5 });
-}
-
-// This option is good if you need the queue object available immediately.
-async function option2() {
-    globalQueue = qbp(items, { threads: 5 });
-    await globalQueue.each((item) => handler(item));
-}
-```
-
-The `queue` object is also passed to `each`, `error`, `progress`, and `empty` functions whenever they are called.
-
 ### Error Handling and Completed Items
 
 If you need to, you can access all items that completed successfully (did not error out) after or throughout processing with `queue.complete`. Similarly, you can access all items that errored with `queue.errors`, which gets an object with the error and the item.
@@ -279,47 +341,114 @@ functon onError(error, item, queue) {
 
 If you don't supply an `error` function and your `each` function throws an error, it will get output to `console.error()`. So it's recommended to use proper error handling in your `each` function.
 
+### Getting the Queue
+
+```js
+var globalQueue;
+
+// This option gives you the queue after the process has ran.
+async function option1() {
+    globalQueue = await qbp(items, (item) => handler(item), { threads: 5 });
+}
+
+// This option is good if you need the queue object available immediately.
+async function option2() {
+    globalQueue = qbp(items, { threads: 5 });
+    await globalQueue.each((item) => handler(item));
+}
+```
+
+The `queue` object is also passed to `each`, `error`, `progress`, and `empty` functions whenever they are called.
+
+### Queue Object
+
+The queue object is returned by qbp as well as passed to all of the functions you would pass qbp in the options. The queue lets you interact with the process as it is running. Here are the attributes and functions of the queue object.
+
+#### queue.name
+
+If you set the `name` option, this will have that value.
+
+#### queue.empty()
+
+You can call this function if you want to remove all items yet to be processed from the queue.
+
+#### queue.pause()
+
+Call this function to halt processing without removing items from the queue like `queue.empty()` does.
+
+#### queue.add([item][arrayOfItems])
+
+Pass this function one or an array of items to add them to the queue. Keep in mind that the function expects an array passed in to be an array of items to be processed. If the item you want processed is an array, you would want to wrap it in another array before adding it.
+
+#### queue.addAwait([item])
+
+Use this function when you want to add an item to an existing queue and wait for it to complete. This will return a `Promise` object which lets you use `await` or `.then()` on the `addAwait()` function. The item will be returned once it is complete. If the item has an unhandled error in your `each` function, the `Promise` will trigger a rejection and return an object with an `error` attribute and an `item` attribute.
+
+#### queue.threads([int])
+
+Pass this function an integer to set how many threads you want the queue to process simultaneously.
+
+#### queue.rateLimit([rateLimit, rateLimitSeconds, [rateFidelity]])
+
+You can tell the queue to start rate limiting at any time by calling this function and passing in your rate limit options. See [Rate Limiting](#rate-limiting).
+
+#### queue.stopRateLimit()
+
+Call this to stop rate limiting.
+
+#### queue.complete[]
+
+See [Error Handling and Completed Items](#error-handling-and-completed-items).
+
+#### queue.errors[]
+
+See [Error Handling and Completed Items](#error-handling-and-completed-items).
+
+#### queue.counts
+
+This is an object containing attributes: `items` for a total count of items added to the queue, `complete` for total number of items completed, `threads` for now many threads are currently running simultaenously, `queued` for how many items have yet to be processed, and `batch` which is the current batch size.
+
 ### Progress Updates
 
 You can supply a `progress` function in your queue options that will receive progress updates, allowing you to create progress bars and status updates to the user. The function will get an object with these attributes.
 
-#### percent
+#### update.percent
 
 This gives you the percentage (from 0 to 1) of the number of completed items out of the total items added to the queue. Keep in mind, if you add more items as the queue is running the percentage will suddenly go down.
 
-#### queue
+#### update.queue
 
 Supplies the actual queue object. Handy if you're using multiple queues simultaneously with the same progress function.
 
-#### complete
+#### update.complete
 
 How many items have been completely processed.
 
-#### total
+#### update.total
 
 How many items have been added to the queue.
 
-#### threads
+#### update.threads
 
 How many threads are currently running.
 
-#### batch
+#### update.batch
 
 The max size of each batch getting passed to the `each` function.
 
-#### queued
+#### update.queued
 
 How many items have yet to be processed.
 
-#### name
+#### update.name
 
 The name given to the queue when setup. Helps to differentiate between multiple queues running at the same time.
 
-#### itemsPerSecond
+#### update.itemsPerSecond
 
 Average number of items that have been processed within a second since last time the Progress function was called.
 
-#### secondsRemaining
+#### update.secondsRemaining
 
 Estimated number of seconds left to process the queue based on `itemsPerSecond`. If, for some reason, `itemsPerSecond` is `0`, this will be `-1` to signify we can't currently estimate time left. For instance, the first time the `progress` function gets called `secondsRemaining` will be set to `-1`.
 

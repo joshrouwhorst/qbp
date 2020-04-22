@@ -142,7 +142,28 @@ describe('Adding Items', function () {
                 reject(err);
             }
         });
-        
+    });
+
+    it('should let you await an item with addAwait', async function () {
+        var testData = getTestData(100, 10, 100);
+
+        var eachRan = false;
+        var itemFound = false;
+
+        var each = async (item) => {
+            eachRan = true;
+            if (item.test) itemFound = true;
+            await waiter(item);
+        }
+
+        var queue = await qbp(testData, (...args) => each(...args));
+
+        var item = getTestData(1, 500, 500)[0];
+        item.test = true;
+
+        assert.ok(!itemFound);
+        await queue.addAwait(item);
+        assert.ok(itemFound);
     });
 });
 
@@ -533,6 +554,224 @@ describe('Error Handling', function () {
         assert.ok(errorRan);
         assert.equal(queue.complete.length, 0);
         assert.equal(queue.errors.length, 1);
+    });
+});
+
+describe('Rate Limiting', function () {
+    const ACCEPTABLE_THRESHOLD = 1000;
+
+    it('should slow down the number of calls if they are going to fast', function () {
+        return new Promise(async (resolve, reject) => {
+            try {
+                var items = getTestData(100, 1, 1);
+                const RATE_MAX = 100;
+                const RATE_TIME = 10;
+                const GOAL_TIME = (items.length / RATE_MAX) * RATE_TIME;
+                this.timeout(500 * 1000);
+
+                var itemCount = 0;
+
+                const each = async (item, queue) => {
+                    itemCount++
+                    await waiter(item);
+                };
+
+                const rateUpdate = ({ projectedRate, projectedCount, currentThreads, threadDiff, neededChange, currentRatePerSecond, minimumThreadTime }) => {
+                    // console.log(`CR: ${currentRatePerSecond}, PR: ${projectedRate}, TD: ${threadDiff}, C: ${neededChange}, T: ${currentThreads}, TT: ${minimumThreadTime}`)
+                }
+
+                const error = (err) => {
+                    assert.fail(err)
+                }
+
+                var startTime = new Date();
+                var timeOutRan = false;
+
+                setTimeout(() => {
+                    console.log(`Items: ${itemCount}`);
+                    timeOutRan = true;
+                    assert.ok(itemCount <= RATE_MAX);
+                }, RATE_TIME * 1000)
+
+                await qbp(items, (...args) => each(...args), {
+                    rateLimit: RATE_MAX,
+                    rateLimitSeconds: RATE_TIME,
+                    rateUpdate: (...args) => rateUpdate(...args),
+                    error: (...args) => error(...args)
+                });
+
+                var endTime = new Date();
+
+                var timeSpan = endTime.getTime() - startTime.getTime();
+                var secondsDifference = ((GOAL_TIME * 1000) - timeSpan) / 1000;
+                console.log(`Seconds Difference: ${secondsDifference}`);
+                assert.ok(timeSpan + ACCEPTABLE_THRESHOLD >= (GOAL_TIME * 1000));
+                assert.ok(timeOutRan);
+                resolve();
+            } catch (err) {
+                reject(err);
+            }
+        });
+    })
+
+    it('should increase threads if requests are going too slow', function () {
+        return new Promise(async (resolve, reject) => {
+            try {
+                var items = getTestData(100, 200, 200);
+                const RATE_MAX = 100;
+                const RATE_TIME = 10;
+                const GOAL_TIME = (items.length / RATE_MAX) * RATE_TIME;
+                this.timeout(500 * 1000);
+
+                var itemCount = 0;
+
+                const each = async (item, queue) => {
+                    itemCount++
+                    await waiter(item);
+                };
+                
+                var rateUpdateRan = false;
+                const rateUpdate = ({ projectedRate, projectedCount, currentThreads, threadDiff, neededChange, currentRatePerSecond, minimumThreadTime }) => {
+                    // console.log(`CR: ${currentRatePerSecond}, PR: ${projectedRate}, TD: ${threadDiff}, C: ${neededChange}, T: ${currentThreads}, TT: ${minimumThreadTime}`)
+                    assert.equal(currentThreads, 2);
+                    rateUpdateRan = true;
+                }
+
+                const error = (err) => {
+                    assert.fail(err)
+                }
+
+                var startTime = new Date();
+                var timeOutRan = false;
+
+                setTimeout(() => {
+                    console.log(`Items: ${itemCount}`);
+                    timeOutRan = true;
+                    assert.ok(itemCount <= RATE_MAX);
+                }, RATE_TIME * 1000)
+
+                await qbp(items, (...args) => each(...args), {
+                    rateLimit: RATE_MAX,
+                    rateLimitSeconds: RATE_TIME,
+                    rateUpdate: (...args) => rateUpdate(...args),
+                    error: (...args) => error(...args)
+                });
+
+                var endTime = new Date();
+
+                var timeSpan = endTime.getTime() - startTime.getTime();
+                var secondsDifference = ((GOAL_TIME * 1000) - timeSpan) / 1000;
+                console.log(`Seconds Difference: ${secondsDifference}`);
+                assert.ok(rateUpdateRan);
+                assert.ok(timeSpan + ACCEPTABLE_THRESHOLD >= (GOAL_TIME * 1000));
+                assert.ok(timeOutRan);
+                resolve();
+            } catch (err) {
+                reject(err);
+            }
+        });
+    });
+
+    it('should handle a range of processing times', function () {
+        return new Promise(async (resolve, reject) => {
+            try {
+                var items = getTestData(100, 1, 300);
+                const RATE_MAX = 100;
+                const RATE_TIME = 10;
+                const GOAL_TIME = (items.length / RATE_MAX) * RATE_TIME;
+                this.timeout(500 * 1000);
+
+                var itemCount = 0;
+
+                const each = async (item, queue) => {
+                    itemCount++
+                    await waiter(item);
+                };
+                
+                var rateUpdateRan = false;
+                const rateUpdate = ({ projectedRate, projectedCount, currentThreads, threadDiff, neededChange, currentRatePerSecond, minimumThreadTime }) => {
+                    // console.log(`CR: ${currentRatePerSecond}, PR: ${projectedRate}, TD: ${threadDiff}, C: ${neededChange}, T: ${currentThreads}, TT: ${minimumThreadTime}`)
+                    assert.equal(currentThreads, 2);
+                    rateUpdateRan = true;
+                }
+
+                const error = (err) => {
+                    assert.fail(err)
+                }
+
+                var startTime = new Date();
+
+                await qbp(items, (...args) => each(...args), {
+                    rateLimit: RATE_MAX,
+                    rateLimitSeconds: RATE_TIME,
+                    rateUpdate: (...args) => rateUpdate(...args),
+                    error: (...args) => error(...args)
+                });
+
+                var endTime = new Date();
+
+                var timeSpan = endTime.getTime() - startTime.getTime();
+                var secondsDifference = ((GOAL_TIME * 1000) - timeSpan) / 1000;
+                console.log(`Seconds Difference: ${secondsDifference}`);
+                assert.ok(rateUpdateRan);
+                assert.ok(timeSpan + ACCEPTABLE_THRESHOLD >= (GOAL_TIME * 1000));
+                resolve();
+            } catch (err) {
+                reject(err);
+            }
+        });
+    });
+
+    it('should let you stop rate limiting', function() {
+        return new Promise(async (resolve, reject) => {
+            try {
+                var items = getTestData(100, 1, 1);
+                const RATE_MAX = 100;
+                const RATE_TIME = 10;
+                const GOAL_TIME = (items.length / RATE_MAX) * RATE_TIME;
+                this.timeout(500 * 1000);
+
+                var itemCount = 0;
+
+                const each = async (item, queue) => {
+                    itemCount++
+                    await waiter(item);
+                };
+                
+                var rateUpdateRan = false;
+                const rateUpdate = ({ projectedRate, queue, currentThreads, threadDiff, neededChange, currentRatePerSecond, minimumThreadTime }) => {
+                    // console.log(`CR: ${currentRatePerSecond}, PR: ${projectedRate}, TD: ${threadDiff}, C: ${neededChange}, T: ${currentThreads}, TT: ${minimumThreadTime}`)
+                    rateUpdateRan = true;
+                    queue.stopRateLimit();
+                    queue.threads(items.length);
+                }
+
+                const error = (err) => {
+                    assert.fail(err)
+                }
+
+                var startTime = new Date();
+                var timeOutRan = false;
+
+                await qbp(items, (...args) => each(...args), {
+                    rateLimit: RATE_MAX,
+                    rateLimitSeconds: RATE_TIME,
+                    rateUpdate: (...args) => rateUpdate(...args),
+                    error: (...args) => error(...args)
+                });
+
+                var endTime = new Date();
+
+                var timeSpan = endTime.getTime() - startTime.getTime();
+                var secondsDifference = ((GOAL_TIME * 1000) - timeSpan) / 1000;
+                console.log(`Seconds Difference: ${secondsDifference}`);
+                assert.ok(timeSpan < (GOAL_TIME * 1000) + ACCEPTABLE_THRESHOLD);
+                assert.ok(rateUpdateRan);
+                resolve();
+            } catch (err) {
+                reject(err);
+            }
+        });
     });
 });
 

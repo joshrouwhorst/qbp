@@ -10,11 +10,12 @@ function qbp (...args) {
         spreadItem: false,
         rateLimit: -1,
         rateLimitSeconds: -1,
-        rateFidelity: 16,
+        rateFidelity: 16, // How many times over the course of rateLimitSeconds you want to check the rate
+        rateLimitOnEmpty: false,
+        rateUpdate: noop,
         progress: noop,
         empty: noop,
         error: noop,
-        rateUpdate: noop,
         debug: false
     }
 
@@ -41,7 +42,6 @@ function qbp (...args) {
     var ratePause = false
     var rateLimitRunning = false
     var rateLimitInterval = -1
-    var originalMinimumThreadTime = 0
     var minimumThreadTime = 0
     var slowDownThreads = false
     var rateLimitCanRun = false
@@ -57,8 +57,10 @@ function qbp (...args) {
     queue.resume = resume
     queue.pause = pause
     queue.add = add
+    queue.addAwait = addAwait
     queue.threads = threads
     queue.rateLimit = setRateLimit
+    queue.stopRateLimit = stopRateLimit
     queue.complete = []
     queue.errors = []
     queue.counts = {
@@ -155,6 +157,19 @@ function qbp (...args) {
         if (process) resume(true)
     }
 
+    function addAwait(item) {
+        return new Promise((resolve, reject) => {
+            try {
+                item = new Item(item)
+                item.resolve = resolve
+                item.reject = reject
+                queue.add(item)
+            } catch (err) {
+                reject(err)
+            }
+        })
+    }
+
     function empty () {
     // Clear out any queued items. qbp will finish naturally.
         queueItems.length = 0
@@ -182,6 +197,7 @@ function qbp (...args) {
 
         // Tells us that they manually paused the queue.
         queue.status = 'paused'
+        ratePause = false
     }
 
     function progress (once) {
@@ -223,7 +239,6 @@ function qbp (...args) {
             log(`Running rate limit every ${rateLimitInterval / 1000} seconds`)
             targetRatePerSecond = opts.rateLimit / opts.rateLimitSeconds
             minimumThreadTime = (opts.rateLimitSeconds * 1000) / opts.rateLimit
-            originalMinimumThreadTime = minimumThreadTime
             slowDownThreads = true // Limit thread times immediately then adjust as needed
             queue.threads(1) // Limit number of threads immediately then adjust as needed
             rateLimitValid = true // Make sure we have all the variables we need
@@ -234,25 +249,34 @@ function qbp (...args) {
         }
     }
 
+    function stopRateLimit () {
+        rateLimitCanRun = false
+        slowDownThreads = false
+    }
+
     function rateLimit (fromTheLoop) {
         try {
             if (!rateLimitValid || !rateLimitCanRun) return
 
-            if (rateLimitArr.length === 0) rateLimitArr.unshift({ count: 0, threads: threadCount })
+            if (rateLimitArr.length === 0) rateLimitArr.unshift(0)
 
             if (fromTheLoop) { // Only process if the loop told us to
+                // Remove oldest records
                 rateLimitArr.length = rateLimitArr.length >= opts.rateFidelity ? opts.rateFidelity : rateLimitArr.length
 
                 var count = 0
-                rateLimitArr.forEach((c) => { count += c.count })
+                rateLimitArr.forEach((c) => { count += c })
 
+                // If we're over or at the rate limit, do a hard pause until we're not anymore
                 if (count >= opts.rateLimit && queue.status === 'running') {
                     log('Rate Limit Pause')
                     queue.pause()
+                    ratePause = true
 
                     // Make sure we don't resume a pause that they set, check ratePause
-                } else if (count < opts.rateLimit && queue.status === 'paused') {
+                } else if (count < opts.rateLimit && queue.status === 'paused' && ratePause) {
                     log('Rate Limit Resume')
+                    ratePause = false
                     queue.resume()
                 }
 
@@ -260,32 +284,31 @@ function qbp (...args) {
 
                 if (rateLimitArr.length >= projectionFidelity) {
                     projectionFidelity = rateLimitArr.length > projectionFidelity ? rateLimitArr.length - 1 : projectionFidelity
-                    log(`projectionFidelity: ${projectionFidelity}`)
-                    var projDataSet = rateLimitArr.slice(0, projectionFidelity - 1)
+                    const projDataSet = rateLimitArr.slice(0, projectionFidelity - 1)
                     var totalRealCount = 0
-                    projDataSet.forEach(c => { totalRealCount += c.count })
+                    projDataSet.forEach(c => { totalRealCount += c })
 
-                    var currentRatePerSecond = projDataSet[0].count / (rateLimitInterval / 1000)
-                    var ratio = currentRatePerSecond / targetRatePerSecond
-                    var currentThreadRate = projDataSet[0].count / projDataSet[0].threads / (rateLimitInterval / 1000)
-                    var secondsInRate = opts.rateLimitSeconds
-                    var currentSeconds = projDataSet.length * (rateLimitInterval / 1000)
-                    var futureSeconds = secondsInRate - currentSeconds
-                    var projectedFutureCount = futureSeconds * currentRatePerSecond
-                    var projectedCount = totalRealCount + projectedFutureCount
-                    var projectedRate = projectedCount / secondsInRate
-                    var neededChange = targetRatePerSecond - projectedRate
+                    const currentRatePerSecond = projDataSet[0] / (rateLimitInterval / 1000)
+                    const currentThreadRate = projDataSet[0] / threadCount / (rateLimitInterval / 1000)
+                    const secondsInRate = opts.rateLimitSeconds
+                    const currentSeconds = projDataSet.length * (rateLimitInterval / 1000)
+                    const futureSeconds = secondsInRate - currentSeconds
+                    const projectedFutureCount = futureSeconds * currentRatePerSecond
+                    const projectedCount = totalRealCount + projectedFutureCount
+                    const projectedRate = projectedCount / secondsInRate
+                    const neededChange = targetRatePerSecond - projectedRate
 
-                    var threadDiff = neededChange / (currentThreadRate || 0.1)
-                    var threadsToAdd = Math.ceil(threadDiff)
+                    const threadDiff = neededChange / (currentThreadRate || 0.1)
+                    const threadsToAdd = Math.round(threadDiff)
                     var targetThreads = (threadCount + threadsToAdd)
                     if (targetThreads < 1) targetThreads = 1
-                    minimumThreadTime = originalMinimumThreadTime * (ratio)
-                    queue.threads(targetThreads)
+                    if (rateLimitCanRun) queue.threads(targetThreads) // Make sure that we haven't been stopped while processing
+
+                    // Provide stats on rate limit if they want it
                     opts.rateUpdate({ queue, projectedCount, projectedRate, threadDiff, minimumThreadTime, currentThreads: threadCount, targetThreads, currentRatePerSecond, currentThreadRate, neededChange })
                 }
 
-                rateLimitArr.unshift({ count: 0, threads: threadCount })
+                rateLimitArr.unshift(0)
             }
 
             // Do a loop if the queue is not empty and either this call is from the timeout loop or we're not currently running.
@@ -317,7 +340,7 @@ function qbp (...args) {
             updateCounts()
             running = false
             queue.status = 'empty'
-            rateLimitCanRun = false
+            if (!opts.rateLimitOnEmpty) rateLimitCanRun = false
 
             // Send a progress update letting them know we're empty.
             if (itemCount > 0) progress(true)
@@ -333,7 +356,7 @@ function qbp (...args) {
     function setupThreads () {
         try {
             // Make sure we have as many threads as they want running.
-            while (threadCount < opts.threads && running) {
+            while (threadCount < opts.threads && running && queueItems.length > threadCount) {
                 threadCount++;
 
                 (async () => {
@@ -345,39 +368,43 @@ function qbp (...args) {
 
                         // For rate limiting. If we're going faster than we should, slow down.
                         if (slowDownThreads) startTime = new Date()
-                        if (rateLimitArr.length > 0) rateLimitArr[0].count++
+                        if (rateLimitArr.length > 0) rateLimitArr[0]++
 
                         // Peel off a batch of items or a single item.
                         if (opts.batch > 1) item = queueItems.splice(0, opts.batch)
                         else item = queueItems.splice(0, 1)[0]
 
-                        // Batch object used for debugging purposes.
-                        item = new Batch(item, completeCount + threadCount)
+                        var itemObject
+                        if (item.isQbpItem) {
+                            itemObject = item
+                            item = item.value
+                        }
 
                         updateCounts()
 
                         try {
                             // Call the each function.
-                            if (opts.spreadItem) await process(...item.value, queue)
-                            else await process(item.value, queue)
+                            if (opts.spreadItem) await process(...item, queue)
+                            else await process(item, queue)
 
                             // Keep track of completed items.
-                            queue.complete.push(item.value)
+                            queue.complete.push(item)
+                            if (itemObject) itemObject.resolve(item)
                         } catch (err) {
                             // If they have an error function call that, otherwise output to console.
-                            if (opts.error !== noop && opts.spreadItem) opts.error(err, ...item.value, queue)
-                            else if (opts.error !== noop) opts.error(err, item.value, queue)
+                            if (opts.error !== noop && opts.spreadItem) opts.error(err, ...item, queue)
+                            else if (opts.error !== noop) opts.error(err, item, queue)
                             else console.error(err)
 
                             // Keep track of items that had errors.
-                            queue.errors.push({
-                                error: err,
-                                item: item.value
-                            })
+                            var errObj = { error: err, item: item }
+                            queue.errors.push(errObj)
+
+                            if (itemObject) itemObject.reject(errObj)
                         }
 
                         // The completeCount always tracks individual items within the array.
-                        if (opts.batch > 1) completeCount += item.value.length
+                        if (opts.batch > 1) completeCount += item.length
                         else completeCount++
 
                         // For rate limiting. If we're going faster than we should, slow down.
@@ -438,9 +465,10 @@ qbp.cartesian = function cartesian (arr) {
     return k(...arr)
 }
 
-function Batch (value, id) {
+function Item (value, id) {
     this.value = value
     this.id = id
+    this.isQbpItem = true
 }
 
 function QbpProgress (perc, complete, total, threads, queued, itemsPerSecond, secondsRemaining, batchSize, queue) {
