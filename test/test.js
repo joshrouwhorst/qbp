@@ -536,6 +536,74 @@ describe('Error Handling', function () {
     });
 });
 
+describe('Rate Limiting', function () {
+    it('should slow down the number of calls if they are going to fast', function () {
+        return new Promise(async (resolve, reject) => {
+            try {
+                var items = getTestData(700, 300, 500);
+                const RATE_MAX = 100;
+                const RATE_TIME = 25;
+                const GOAL_TIME = (items.length / RATE_MAX) * RATE_TIME;
+                this.timeout(500 * 1000);
+
+                var itemCount = 0;
+
+                const each = async (item, queue) => {
+                    itemCount++
+                    await waiter(item);
+                };
+
+                const progress = ({ threads, percent, itemsPerSecond }) => {
+                    console.log(`Rate: ${itemsPerSecond}, Threads: ${threads}, Percent: ${(Math.round(percent * 100))}`)
+                };
+
+                const rateUpdate = ({ projectedRate, projectedCount, currentThreads, threadDiff, neededChange, currentRatePerSecond, minimumThreadTime }) => {
+                    console.log(`CR: ${currentRatePerSecond}, PR: ${projectedRate}, TD: ${threadDiff}, C: ${neededChange}, T: ${currentThreads}, TT: ${minimumThreadTime}`)
+                }
+
+                const error = (err) => {
+                    assert.fail(err)
+                }
+
+                var startTime = new Date();
+                var timeOutRan = false;
+
+                setTimeout(() => {
+                    console.log(`Items: ${itemCount}`);
+                    timeOutRan = true;
+                    assert.ok(itemCount <= RATE_MAX);
+                    itemCount = 0;
+                }, RATE_TIME * 1000)
+
+                setTimeout(() => {
+                    console.log(`Items: ${itemCount}`);
+                    timeOutRan = true;
+                    assert.ok(itemCount <= RATE_MAX);
+                }, RATE_TIME * 2 * 1000)
+
+                await qbp(items, (...args) => each(...args), {
+                    rateLimit: RATE_MAX,
+                    rateLimitSeconds: RATE_TIME,
+                    rateUpdate: (...args) => rateUpdate(...args),
+                    progress: (prog) => progress(prog),
+                    error: (...args) => error(...args)
+                });
+
+                var endTime = new Date();
+
+                var timeSpan = endTime.getTime() - startTime.getTime();
+                var secondsDifference = ((GOAL_TIME * 1000) - timeSpan) / 1000;
+                console.log(`Seconds Difference: ${secondsDifference}`);
+                assert.ok(timeSpan >= (GOAL_TIME * 1000));
+                assert.ok(timeOutRan);
+                resolve();
+            } catch (err) {
+                reject(err);
+            }
+        });
+    })
+});
+
 // Utility functions
 
 function waiter(num) {

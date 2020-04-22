@@ -105,7 +105,7 @@ async function each(item, queue) { // You can also return a promise or provide a
     }
 }
 
-function progressFunc(prog, queue) {
+function progressFunc(prog) {
     console.log('Percent Complete: ' + prog.percent);
     console.log('Items Complete: ' + prog.complete);
     console.log('Total Items: ' + prog.total);
