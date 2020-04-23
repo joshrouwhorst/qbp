@@ -240,8 +240,9 @@ function qbp (...args) {
             targetRatePerSecond = opts.rateLimit / opts.rateLimitSeconds
             minimumThreadTime = (opts.rateLimitSeconds * 1000) / opts.rateLimit
             slowDownThreads = true // Limit thread times immediately then adjust as needed
-            queue.threads(1) // Limit number of threads immediately then adjust as needed
             rateLimitValid = true // Make sure we have all the variables we need
+            rateLimitArr = [0] // Reset the array
+            queue.threads(1) // Limit number of threads immediately then adjust as needed
             rateLimit() // Make sure the rate limit loop is running
         } else {
             rateLimitValid = false
@@ -376,7 +377,7 @@ function qbp (...args) {
                         else item = queueItems.splice(0, 1)[0]
 
                         var itemObject
-                        if (item.isQbpItem) {
+                        if (item instanceof Item) {
                             itemObject = item
                             item = item.value
                         }
