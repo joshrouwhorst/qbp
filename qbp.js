@@ -157,7 +157,7 @@ function qbp (...args) {
         if (process) resume(true)
     }
 
-    function addAwait(item) {
+    function addAwait (item) {
         return new Promise((resolve, reject) => {
             try {
                 item = new Item(item)
@@ -301,6 +301,7 @@ function qbp (...args) {
                     const threadDiff = neededChange / (currentThreadRate || 0.1)
                     const threadsToAdd = Math.round(threadDiff)
                     var targetThreads = (threadCount + threadsToAdd)
+                    if (queueItems.length < targetThreads) targetThreads = queueItems.length
                     if (targetThreads < 1) targetThreads = 1
                     if (rateLimitCanRun) queue.threads(targetThreads) // Make sure that we haven't been stopped while processing
 
