@@ -470,6 +470,131 @@ describe('Progress', function () {
         assert.equal(queue.name, NAME);
         assert.equal(queue.errors.length, 0);
     });
+
+    it('should handle child queue progress updates, "on change" progress internvals, and states', async function () {
+        const MAX_CHILD_ITEMS = 10;
+        var items = getTestData(MAX_ITEMS, 10, 50);
+        var subItems = getTestData(MAX_CHILD_ITEMS, 10, 50)
+
+        var eachCount = 0;
+        var subCount = 0;
+        var stateUpdate = false;
+        var parentStateUpdate = false;
+        var childRunning = false;
+
+        var each = async (item, queue) => {
+            parentStateUpdate = true;
+            queue.progressState(`Item ${eachCount}`);
+            
+            await qbp(subItems, async (subItem, subQueue) => {
+                childRunning = true;
+                stateUpdate = true;
+                subQueue.progressState(`Item ${subCount} / ${eachCount}`)
+                await waiter(subItem);
+                subCount++;
+            }, {
+                threads: 1,
+                parent: queue,
+                name: `Child ${eachCount}`
+            })
+            
+            childRunning = false;
+            eachCount++;
+            subCount = 0;
+        };
+
+        var progressRanCount = 0;
+
+        var progress = (prog) => {
+            progressRanCount++;
+            assert.ok(prog);
+            assert.ok(prog.percent >= 0 && prog.percent <= 1);
+            assert.ok(prog.children instanceof Array);
+            assert.equal(prog.percent, eachCount / items.length)
+
+            if (childRunning) {
+                assert.equal(prog.children.length, 1)
+                assert.equal(prog.children[0].percent, subCount / subItems.length);
+            }
+
+            if (parentStateUpdate) {
+                assert.equal(prog.state, `Item ${eachCount}`);
+                parentStateUpdate = false;
+            }
+
+            if (stateUpdate) {
+                assert.equal(prog.children[0].state, `Item ${subCount} / ${eachCount}`);
+                stateUpdate = false;
+            }
+        }
+        
+        assert.equal(progressRanCount, 0);
+        assert.equal(eachCount, 0);
+        
+        var queue = await qbp(items, (...args) => each(...args), {
+            threads: 1,
+            progress: (...args) => progress(...args),
+            name: 'Parent'
+        });
+
+        assert.equal(eachCount, MAX_ITEMS);
+        assert.ok(progressRanCount >= MAX_ITEMS * MAX_CHILD_ITEMS);
+        assert.equal(queue.errors.length, 0);
+    })
+
+    it('should account for a defined number of children', async function () {
+        const MAX_CHILD_ITEMS = 20;
+        const THREADS = 2;
+        var items = getTestData(MAX_ITEMS, 10, 50);
+        var subItems1 = getTestData(MAX_CHILD_ITEMS, 10, 10)
+        var subItems2 = getTestData(MAX_CHILD_ITEMS - 5, 10, 10)
+
+        var eachCount = 0;
+        var subCount = 0;
+
+        var each = async (item, queue) => {
+            eachCount++;
+            
+            await qbp(subItems1, async (subItem, subQueue) => {
+                await waiter(subItem);
+                subCount++;
+            }, {
+                threads: 1,
+                parent: queue,
+                name: `Child 1-${eachCount}`
+            })
+
+            await qbp(subItems2, async (subItem, subQueue) => {
+                await waiter(subItem);
+                subCount++;
+            }, {
+                threads: 1,
+                parent: queue,
+                name: `Child 2-${eachCount}`
+            })
+        };
+
+        var progressRanCount = 0;
+
+        var progress = (prog) => {
+            progressRanCount++;
+            assert.ok(prog.children.length >= 0 && prog.children.length <= THREADS * 2)
+        }
+        
+        assert.equal(progressRanCount, 0);
+        assert.equal(eachCount, 0);
+        
+        var queue = await qbp(items, (...args) => each(...args), {
+            threads: THREADS,
+            progress: (...args) => progress(...args),
+            name: 'Parent'
+        });
+
+        assert.equal(eachCount, MAX_ITEMS);
+        assert.equal(subCount, items.length * (subItems1.length + subItems2.length))
+        assert.ok(progressRanCount >= MAX_ITEMS * MAX_CHILD_ITEMS);
+        assert.equal(queue.errors.length, 0);
+    })
 });
 
 describe('Mix', function () {
@@ -526,7 +651,7 @@ describe('Mix', function () {
 
 describe('Error Handling', function () {
     it('should call an error function its given', async function () {
-        var items = getTestData(1, 10, 50);
+        var items = getTestData(1, 10, 10);
 
         var eachRan = false;
         var each = async (item1) => {
@@ -576,11 +701,9 @@ describe('Rate Limiting', function () {
                     await waiter(item);
                 };
 
-                const rateUpdate = ({ projectedRate, projectedCount, currentThreads, threadDiff, neededChange, currentRatePerSecond, minimumThreadTime }) => {
-                    // console.log(`CR: ${currentRatePerSecond}, PR: ${projectedRate}, TD: ${threadDiff}, C: ${neededChange}, T: ${currentThreads}, TT: ${minimumThreadTime}`)
-                }
+                const rateUpdate = () => {}
 
-                const error = (err) => {
+                const error = function (err) {
                     assert.fail(err)
                 }
 
@@ -588,12 +711,11 @@ describe('Rate Limiting', function () {
                 var timeOutRan = false;
 
                 setTimeout(() => {
-                    console.log(`Items: ${itemCount}`);
                     timeOutRan = true;
                     assert.ok(itemCount <= RATE_MAX);
                 }, RATE_TIME * 1000)
 
-                await qbp(items, (...args) => each(...args), {
+                var queue = await qbp(items, (...args) => each(...args), {
                     rateLimit: RATE_MAX,
                     rateLimitSeconds: RATE_TIME,
                     rateUpdate: (...args) => rateUpdate(...args),
@@ -603,8 +725,7 @@ describe('Rate Limiting', function () {
                 var endTime = new Date();
 
                 var timeSpan = endTime.getTime() - startTime.getTime();
-                var secondsDifference = ((GOAL_TIME * 1000) - timeSpan) / 1000;
-                console.log(`Seconds Difference: ${secondsDifference}`);
+                assert.equal(queue.errors.length, 0);
                 assert.ok(timeSpan + ACCEPTABLE_THRESHOLD >= (GOAL_TIME * 1000));
                 assert.ok(timeOutRan);
                 resolve();
@@ -631,13 +752,12 @@ describe('Rate Limiting', function () {
                 };
                 
                 var rateUpdateRan = false;
-                const rateUpdate = ({ projectedRate, projectedCount, currentThreads, threadDiff, neededChange, currentRatePerSecond, minimumThreadTime }) => {
-                    // console.log(`CR: ${currentRatePerSecond}, PR: ${projectedRate}, TD: ${threadDiff}, C: ${neededChange}, T: ${currentThreads}, TT: ${minimumThreadTime}`)
+                const rateUpdate = ({ currentThreads }) => {
                     assert.equal(currentThreads, 2);
                     rateUpdateRan = true;
                 }
 
-                const error = (err) => {
+                const error = function (err) {
                     assert.fail(err)
                 }
 
@@ -645,14 +765,14 @@ describe('Rate Limiting', function () {
                 var timeOutRan = false;
 
                 setTimeout(() => {
-                    console.log(`Items: ${itemCount}`);
                     timeOutRan = true;
                     assert.ok(itemCount <= RATE_MAX);
                 }, RATE_TIME * 1000)
 
-                await qbp(items, (...args) => each(...args), {
+                var queue = await qbp(items, (...args) => each(...args), {
                     rateLimit: RATE_MAX,
                     rateLimitSeconds: RATE_TIME,
+                    rateLimitFidelity: 4,
                     rateUpdate: (...args) => rateUpdate(...args),
                     error: (...args) => error(...args)
                 });
@@ -660,8 +780,7 @@ describe('Rate Limiting', function () {
                 var endTime = new Date();
 
                 var timeSpan = endTime.getTime() - startTime.getTime();
-                var secondsDifference = ((GOAL_TIME * 1000) - timeSpan) / 1000;
-                console.log(`Seconds Difference: ${secondsDifference}`);
+                assert.equal(queue.errors.length, 0);
                 assert.ok(rateUpdateRan);
                 assert.ok(timeSpan + ACCEPTABLE_THRESHOLD >= (GOAL_TIME * 1000));
                 assert.ok(timeOutRan);
@@ -689,19 +808,17 @@ describe('Rate Limiting', function () {
                 };
                 
                 var rateUpdateRan = false;
-                const rateUpdate = ({ projectedRate, projectedCount, currentThreads, threadDiff, neededChange, currentRatePerSecond, minimumThreadTime }) => {
-                    // console.log(`CR: ${currentRatePerSecond}, PR: ${projectedRate}, TD: ${threadDiff}, C: ${neededChange}, T: ${currentThreads}, TT: ${minimumThreadTime}`)
-                    assert.equal(currentThreads, 2);
+                const rateUpdate = () => {
                     rateUpdateRan = true;
                 }
 
-                const error = (err) => {
+                const error = function (err) {
                     assert.fail(err)
                 }
 
                 var startTime = new Date();
 
-                await qbp(items, (...args) => each(...args), {
+                var queue = await qbp(items, (...args) => each(...args), {
                     rateLimit: RATE_MAX,
                     rateLimitSeconds: RATE_TIME,
                     rateUpdate: (...args) => rateUpdate(...args),
@@ -711,8 +828,7 @@ describe('Rate Limiting', function () {
                 var endTime = new Date();
 
                 var timeSpan = endTime.getTime() - startTime.getTime();
-                var secondsDifference = ((GOAL_TIME * 1000) - timeSpan) / 1000;
-                console.log(`Seconds Difference: ${secondsDifference}`);
+                assert.equal(queue.errors.length, 0);
                 assert.ok(rateUpdateRan);
                 assert.ok(timeSpan + ACCEPTABLE_THRESHOLD >= (GOAL_TIME * 1000));
                 resolve();
@@ -739,21 +855,20 @@ describe('Rate Limiting', function () {
                 };
                 
                 var rateUpdateRan = false;
-                const rateUpdate = ({ projectedRate, queue, currentThreads, threadDiff, neededChange, currentRatePerSecond, minimumThreadTime }) => {
-                    // console.log(`CR: ${currentRatePerSecond}, PR: ${projectedRate}, TD: ${threadDiff}, C: ${neededChange}, T: ${currentThreads}, TT: ${minimumThreadTime}`)
-                    rateUpdateRan = true;
+                const rateUpdate = ({ queue }) => {
+                   rateUpdateRan = true;
                     queue.stopRateLimit();
                     queue.threads(items.length);
                 }
 
-                const error = (err) => {
+                const error = function (err) {
                     assert.fail(err)
                 }
 
                 var startTime = new Date();
                 var timeOutRan = false;
 
-                await qbp(items, (...args) => each(...args), {
+                var queue = await qbp(items, (...args) => each(...args), {
                     rateLimit: RATE_MAX,
                     rateLimitSeconds: RATE_TIME,
                     rateUpdate: (...args) => rateUpdate(...args),
@@ -763,8 +878,7 @@ describe('Rate Limiting', function () {
                 var endTime = new Date();
 
                 var timeSpan = endTime.getTime() - startTime.getTime();
-                var secondsDifference = ((GOAL_TIME * 1000) - timeSpan) / 1000;
-                console.log(`Seconds Difference: ${secondsDifference}`);
+                assert.equal(queue.errors.length, 0);
                 assert.ok(timeSpan < (GOAL_TIME * 1000) + ACCEPTABLE_THRESHOLD);
                 assert.ok(rateUpdateRan);
                 resolve();
