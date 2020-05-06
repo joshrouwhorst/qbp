@@ -703,7 +703,7 @@ describe('Rate Limiting', function () {
 
                 const rateUpdate = () => {}
 
-                const error = (err) => {
+                const error = function (err) {
                     assert.fail(err)
                 }
 
@@ -757,7 +757,7 @@ describe('Rate Limiting', function () {
                     rateUpdateRan = true;
                 }
 
-                const error = (err) => {
+                const error = function (err) {
                     assert.fail(err)
                 }
 
@@ -772,6 +772,7 @@ describe('Rate Limiting', function () {
                 var queue = await qbp(items, (...args) => each(...args), {
                     rateLimit: RATE_MAX,
                     rateLimitSeconds: RATE_TIME,
+                    rateLimitFidelity: 4,
                     rateUpdate: (...args) => rateUpdate(...args),
                     error: (...args) => error(...args)
                 });
@@ -811,7 +812,7 @@ describe('Rate Limiting', function () {
                     rateUpdateRan = true;
                 }
 
-                const error = (err) => {
+                const error = function (err) {
                     assert.fail(err)
                 }
 
@@ -860,7 +861,7 @@ describe('Rate Limiting', function () {
                     queue.threads(items.length);
                 }
 
-                const error = (err) => {
+                const error = function (err) {
                     assert.fail(err)
                 }
 
