@@ -124,7 +124,6 @@ async function each(item, queue) { // You can also return a promise or provide a
 
 function progressFunc(update) {
     console.log('Percent Complete: ' + update.percent);
-    console.log('Children Queues Percent Complete: ' + update.childPercent);
     console.log('Items Complete: ' + update.complete);
     console.log('Total Items: ' + update.total);
     console.log('Queued Items: ' + update.queued);
@@ -417,7 +416,7 @@ You can supply a `progress` function in your queue options that will receive pro
 
 ### Progress Updates on Change Example
 
-If you supply a `progress` function in your options but not a `progressInterval` option, then your progress function will get called everytime there is a change such as a when `queue.progressStatus()` gets called or an item has finished processing.
+If you supply a `progress` function in your options but not a `progressInterval` option, then your progress function will get called everytime there is a change such as a when `queue.progressState()` gets called or an item has finished processing.
 
 ```js
 const qbp = require('qbp');
@@ -429,7 +428,7 @@ async function start (items) {
 }
 
 async function each (item, queue) {
-    queue.progressStatus(`Currently processing ${item.name}.`)
+    queue.progressState(`Currently processing ${item.name}.`)
     // Do something with the item.
 }
 
@@ -448,7 +447,7 @@ function progress (update) {
 
 ### Progress Updates on Interval Example
 
-The `progressInterval` option takes a value of milliseconds. Your `progress` function will get called that often and won't be called by items being completed or `queue.progressStatus()` getting called.
+The `progressInterval` option takes a value of milliseconds. Your `progress` function will get called that often and won't be called by items being completed or `queue.progressState()` getting called.
 
 ```js
 const qbp = require('qbp');
@@ -461,7 +460,7 @@ async function start (items) {
 }
 
 async function each (item, queue) {
-    queue.progressStatus(`Currently processing ${item.name}.`)
+    queue.progressState(`Currently processing ${item.name}.`)
     // Do something with the item.
 }
 
@@ -495,14 +494,14 @@ async function processStudents (students) {
 }
 
 async function processStudent (student, queue) {
-    queue.progressStatus(`Currently processing ${student.name}.`)
+    queue.progressState(`Currently processing ${student.name}.`)
     student.classes = []; // Do some stuff to the student item
     await qbp(classes, (...args) => addStudentToClass(student, ...args), { parent: queue }) // Setting the parent option
 }
 
 async function addStudentToClass (student, class, queue) {
     // The queue you're getting here is a child of the queue setup in processStudents()
-    queue.progressStatus(`Adding ${student.name} to ${class}.`);
+    queue.progressState(`Adding ${student.name} to ${class}.`);
     // Do whatever to add the student to the class.
 }
 
