@@ -4,6 +4,7 @@
   "description": "Tool to queue, batch, and process asynchronously with controlled threads.",
   "main": "qbp.js",
   "scripts": {
+    "lint": "eslint qbp.js --fix",
     "test": "mocha"
   },
   "repository": {

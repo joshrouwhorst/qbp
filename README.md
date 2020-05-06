@@ -2,8 +2,12 @@
 
 [![npm version](https://badge.fury.io/js/qbp.svg)](https://badge.fury.io/js/qbp)
 [![MIT license](https://img.shields.io/badge/license-MIT-brightgreen.svg)](http://opensource.org/licenses/MIT)
+[![Build Status](https://travis-ci.com/joshrouwhorst/qbp.svg?branch=master)](https://travis-ci.com/joshrouwhorst/qbp)
+[![Downloads](https://img.shields.io/npm/dt/qbp?color=blue)](https://www.npmjs.com/package/qbp)
 
 Have thousands of items you need to loop through performing asynchronous tasks such as database or server calls? Trying to find a way to easily limit the number of simultaneous functions and keep them all straight? Wishing you had a tool to queue, batch, and process all these items? This package may be right for you!
+
+Reach out on [Twitter](https://twitter.com/joshrouwhorst) or [GitHub](https://github.com/joshrouwhorst). Let me know if you like it or have questions.
 
 ## Contents
 
