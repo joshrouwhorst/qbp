@@ -5,15 +5,17 @@ function qbp (...args) {
     var options = {
         name: null,
         threads: null,
-        progressInterval: 10000,
+        progressInterval: 'change',
         batch: 1,
+        parent: null,
+        children: 0,
         spreadItem: false,
         rateLimit: -1,
         rateLimitSeconds: -1,
-        rateFidelity: 16, // How many times over the course of rateLimitSeconds you want to check the rate
+        rateFidelity: 16, // How many times over the course of rateLimitSeconds you want to check the rate.
         rateLimitOnEmpty: false,
         rateUpdate: noop,
-        progress: noop,
+        progress: null,
         empty: noop,
         error: noop,
         debug: false
@@ -26,13 +28,12 @@ function qbp (...args) {
         }
     }
 
-    // Global variables
+    // Global variables.
     var queueItems = []
     var running = false
     var itemCount = 0
     var completeCount = 0
     var threadCount = 0
-    var lastCompleteCount = 0
     var process = null
     var _resolve
     var _reject
@@ -46,8 +47,9 @@ function qbp (...args) {
     var slowDownThreads = false
     var rateLimitCanRun = false
     var targetRatePerSecond = -1
+    var progressOnChange = opts.progressInterval === 'change' && (opts.progress || opts.parent)
 
-    // Create the queue object;
+    // Create the queue object.
     var queue = new Queue()
 
     // Set exposed properties/functions on the queue object.
@@ -61,6 +63,7 @@ function qbp (...args) {
     queue.threads = threads
     queue.rateLimit = setRateLimit
     queue.stopRateLimit = stopRateLimit
+    queue.progressState = setProgressState
     queue.complete = []
     queue.errors = []
     queue.counts = {
@@ -69,6 +72,17 @@ function qbp (...args) {
         threads: threadCount,
         queued: 0,
         batch: 1
+    }
+
+    // Internally used items attached to the queue.
+    queue._ = {
+        children: [],
+        addChild: addChild,
+        removeChild: removeChild,
+        childProgress: childProgress,
+        progress: QbpProgress.Default(queue), // Set the initial progress object.
+        progressState: null,
+        completeWithChildren: 0
     }
 
     // If no thread count is specified, process all items at once.
@@ -95,9 +109,10 @@ function qbp (...args) {
     // Make sure we can tell the difference between when we're initially setting up the queue,
     // and when it has already digested all of the parameters.
     queue.status = 'waiting'
+
     return returnValue
 
-    // For debugging purposes
+    // For debugging purposes.
     function log (msg) {
         if (opts.debug) console.log(msg)
     }
@@ -183,6 +198,10 @@ function qbp (...args) {
             running = true
             rateLimitCanRun = true
             rateLimit()
+
+            // Register with the parent queue.
+            if (opts.parent) opts.parent._.addChild(queue)
+
             setupThreads()
 
             // Start up the progress loop.
@@ -200,50 +219,100 @@ function qbp (...args) {
         ratePause = false
     }
 
+    function addChild (childQueue) {
+        // Make sure we only add once.
+        if (!queue._.children.find(c => c === childQueue)) {
+            queue._.children.push(childQueue)
+        }
+    }
+
+    function removeChild (childQueue) {
+        var idx = queue._.children.findIndex(c => c === childQueue)
+        if (idx > -1) queue._.children.splice(idx, 1)
+    }
+
     function progress (once) {
         if (!running && !once) return
 
+        var now = new Date()
+
         // Figure out the percentage of completion we're currently at.
         var perc
+        var lastCompleteCount = queue._.progress.complete
         if (itemCount > 0) perc = completeCount / itemCount
         else perc = 0
 
+        // Get array of updates from all the children.
+        var children = queue._.children.map(c => c._.progress)
+
         // Figure out how many items per second are being processed.
         var newItemsCompleted = completeCount - lastCompleteCount
-        var timeDiff = 1000 / opts.progressInterval
-        var itemsPerSecond = Math.round(newItemsCompleted * timeDiff)
+        var seconds = (now - queue._.progress.dateTime) / 1000
+        var itemsPerSecond
+        if (seconds) itemsPerSecond = newItemsCompleted / seconds
+        else itemsPerSecond = 0
 
         // Estimate how much time is left.
         var secondsRemaining
         if (!itemsPerSecond) secondsRemaining = -1 // Signal that we currently don't have an estimate.
         else secondsRemaining = Math.ceil(queueItems.length / itemsPerSecond)
 
-        var obj = new QbpProgress(perc, completeCount, itemCount, threadCount, queueItems.length, itemsPerSecond, secondsRemaining, opts.batch, queue)
-        opts.progress(obj)
+        // Setting this in other functions, so just continue the values on to the next progress update.
+        var state = queue._.progress.state
 
-        lastCompleteCount = completeCount
+        queue._.progress = new QbpProgress({
+            percent: perc,
+            children,
+            state,
+            dateTime: now,
+            complete: completeCount,
+            total: itemCount,
+            threads: threadCount,
+            queued: queueItems.length,
+            itemsPerSecond,
+            secondsRemaining,
+            batchSize: opts.batch,
+            queue
+        })
+
+        // Send notifications.
+        if (opts.progress) opts.progress(queue._.progress)
+        if (opts.parent) opts.parent._.childProgress(queue._.progress.state)
 
         // Set timer to fire this again.
-        if (!once && running && opts.progress !== noop) {
+        if (!once && running && !progressOnChange && (opts.progress || opts.parent)) {
             setTimeout(progress, opts.progressInterval)
         }
+    }
+
+    // Set a text state for what the queue is currently doing.
+    function setProgressState (state) {
+        queue._.progress.state = state
+        if (progressOnChange) progress(true)
+    }
+
+    // Register the current state of progress for children.
+    function childProgress (state) {
+        queue._.progress.childState = state
+        if (opts.parent) setProgressState(state) // If we're not the top-most queue, bubble status changes up.
+        else if (progressOnChange) progress(true)
     }
 
     function setRateLimit (maxRate, rateLimitSeconds, fidelity) {
         opts.rateLimit = maxRate
         opts.rateLimitSeconds = rateLimitSeconds
-        opts.rateFidelity = fidelity || opts.rateFidelity // Just keep it the same if none given
+        opts.rateFidelity = fidelity || opts.rateFidelity // Just keep it the same if none given.
 
         if (opts.rateLimit !== -1 && opts.rateLimitSeconds !== -1 && opts.rateFidelity !== -1) {
             rateLimitInterval = Math.floor((opts.rateLimitSeconds / opts.rateFidelity) * 1000)
             log(`Running rate limit every ${rateLimitInterval / 1000} seconds`)
             targetRatePerSecond = opts.rateLimit / opts.rateLimitSeconds
             minimumThreadTime = (opts.rateLimitSeconds * 1000) / opts.rateLimit
-            slowDownThreads = true // Limit thread times immediately then adjust as needed
-            rateLimitValid = true // Make sure we have all the variables we need
-            rateLimitArr = [0] // Reset the array
-            queue.threads(1) // Limit number of threads immediately then adjust as needed
-            rateLimit() // Make sure the rate limit loop is running
+            slowDownThreads = true // Limit thread times immediately then adjust as needed.
+            rateLimitValid = true // Make sure we have all the variables we need.
+            rateLimitArr = [0] // Reset the array.
+            queue.threads(1) // Limit number of threads immediately then adjust as needed.
+            rateLimit() // Make sure the rate limit loop is running.
         } else {
             rateLimitValid = false
             slowDownThreads = false
@@ -261,20 +330,20 @@ function qbp (...args) {
 
             if (rateLimitArr.length === 0) rateLimitArr.unshift(0)
 
-            if (fromTheLoop) { // Only process if the loop told us to
-                // Remove oldest records
+            if (fromTheLoop) { // Only process if the loop told us to.
+                // Remove oldest records.
                 rateLimitArr.length = rateLimitArr.length >= opts.rateFidelity ? opts.rateFidelity : rateLimitArr.length
 
                 var count = 0
                 rateLimitArr.forEach((c) => { count += c })
 
-                // If we're over or at the rate limit, do a hard pause until we're not anymore
+                // If we're over or at the rate limit, do a hard pause until we're not anymore.
                 if (count >= opts.rateLimit && queue.status === 'running') {
                     log('Rate Limit Pause')
                     queue.pause()
                     ratePause = true
 
-                    // Make sure we don't resume a pause that they set, check ratePause
+                    // Make sure we don't resume a pause that they set, check ratePause.
                 } else if (count < opts.rateLimit && queue.status === 'paused' && ratePause) {
                     log('Rate Limit Resume')
                     ratePause = false
@@ -304,9 +373,9 @@ function qbp (...args) {
                     var targetThreads = (threadCount + threadsToAdd)
                     if (queueItems.length < targetThreads) targetThreads = queueItems.length
                     if (targetThreads < 1) targetThreads = 1
-                    if (rateLimitCanRun) queue.threads(targetThreads) // Make sure that we haven't been stopped while processing
+                    if (rateLimitCanRun) queue.threads(targetThreads) // Make sure that we haven't been stopped while processing.
 
-                    // Provide stats on rate limit if they want it
+                    // Provide stats on rate limit if they want it.
                     opts.rateUpdate({ queue, projectedCount, projectedRate, threadDiff, minimumThreadTime, currentThreads: threadCount, targetThreads, currentRatePerSecond, currentThreadRate, neededChange })
                 }
 
@@ -317,7 +386,7 @@ function qbp (...args) {
             if ((fromTheLoop || !rateLimitRunning)) {
                 rateLimitRunning = true
                 setTimeout(() => rateLimit(true), rateLimitInterval)
-            } else if (fromTheLoop) { // If the queue is empty, then we want to stop rate limiting
+            } else if (fromTheLoop) { // If the queue is empty, then we want to stop rate limiting.
                 rateLimitRunning = false
                 rateLimitArr.length = 0
             }
@@ -328,7 +397,6 @@ function qbp (...args) {
 
     function waiter (milliseconds) {
         return new Promise((resolve) => {
-            // if (milliseconds < 0) return resolve()
             setTimeout(() => resolve(), milliseconds)
         })
     }
@@ -346,6 +414,9 @@ function qbp (...args) {
 
             // Send a progress update letting them know we're empty.
             if (itemCount > 0) progress(true)
+
+            // Remove ourselves from the parent.
+            if (opts.parent) opts.parent._.removeChild(queue)
 
             // Call their empty function if they have one.
             opts.empty(queue)
@@ -416,6 +487,7 @@ function qbp (...args) {
                         }
 
                         isRunning = running
+                        if (progressOnChange) progress(true)
                     }
 
                     // Figure out if we're done.
@@ -473,8 +545,10 @@ function Item (value, id) {
     this.isQbpItem = true
 }
 
-function QbpProgress (perc, complete, total, threads, queued, itemsPerSecond, secondsRemaining, batchSize, queue) {
-    this.percent = perc
+function QbpProgress ({ percent, state, children, dateTime, complete, total, threads, queued, itemsPerSecond, secondsRemaining, batchSize, queue }) {
+    this.percent = percent
+    this.children = children
+    this.state = state
     this.complete = complete
     this.total = total
     this.threads = threads
@@ -483,10 +557,28 @@ function QbpProgress (perc, complete, total, threads, queued, itemsPerSecond, se
     this.batch = batchSize
     this.queue = queue
     this.secondsRemaining = secondsRemaining
+    this.dateTime = dateTime
 
     if (queue.name) {
         this.name = queue.name
     }
+}
+
+QbpProgress.Default = function (queue) {
+    return new QbpProgress({
+        percent: 0,
+        state: null,
+        children: [],
+        dateTime: new Date(),
+        complete: 0,
+        total: 0,
+        threads: 0,
+        queued: 0,
+        itemsPerSecond: 0,
+        seconds: -1,
+        batchSize: 0,
+        queue
+    })
 }
 
 function noop () {};

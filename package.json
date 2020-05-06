@@ -1,6 +1,6 @@
 {
   "name": "qbp",
-  "version": "2.0.8",
+  "version": "2.1.0",
   "description": "Tool to queue, batch, and process asynchronously with controlled threads.",
   "main": "qbp.js",
   "scripts": {
@@ -26,7 +26,7 @@
     "rate limiting",
     "rate limit"
   ],
-  "author": "Josh Rouwhorst (http://joshrouwhorst.com)",
+  "author": "Josh Rouwhorst (https://github.com/joshrouwhorst)",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/joshrouwhorst/qbp/issues"

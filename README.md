@@ -1,6 +1,7 @@
 # qbp - queue, batch, process
 
 [![npm version](https://badge.fury.io/js/qbp.svg)](https://badge.fury.io/js/qbp)
+[![MIT license](https://img.shields.io/badge/license-MIT-brightgreen.svg)](http://opensource.org/licenses/MIT)
 
 Have thousands of items you need to loop through performing asynchronous tasks such as database or server calls? Trying to find a way to easily limit the number of simultaneous functions and keep them all straight? Wishing you had a tool to queue, batch, and process all these items? This package may be right for you!
 
@@ -8,55 +9,47 @@ Have thousands of items you need to loop through performing asynchronous tasks s
 
 - [qbp - queue, batch, process](#qbp---queue-batch-process)
   - [Contents](#contents)
-  - [v2.x Documentation](#v2x-documentation)
-    - [Usage](#usage)
+  - [Usage](#usage)
     - [Full Options Example](#full-options-example)
-    - [Batching](#batching)
-    - [Throttling](#throttling)
-    - [Rate Limiting](#rate-limiting)
-      - [Example](#example)
-    - [Mixing](#mixing)
-    - [Error Handling and Completed Items](#error-handling-and-completed-items)
-    - [Getting the Queue](#getting-the-queue)
-    - [Queue Object](#queue-object)
-      - [queue.name](#queuename)
-      - [queue.empty()](#queueempty)
-      - [queue.pause()](#queuepause)
-      - [queue.add([item][arrayOfItems])](#queueadditem)
-      - [queue.addAwait([item])](#queueaddawaititem)
-      - [queue.threads([int])](#queuethreadsint)
-      - [queue.rateLimit([rateLimit, rateLimitSeconds, [rateFidelity]])](#queueratelimitratelimit-ratelimitseconds-ratefidelity)
-      - [queue.stopRateLimit()](#queuestopratelimit)
-      - [queue.complete[]](#queuecomplete)
-      - [queue.errors[]](#queueerrors)
-      - [queue.counts](#queuecounts)
-    - [Progress Updates](#progress-updates)
-      - [update.percent](#updatepercent)
-      - [update.queue](#updatequeue)
-      - [update.complete](#updatecomplete)
-      - [update.total](#updatetotal)
-      - [update.threads](#updatethreads)
-      - [update.batch](#updatebatch)
-      - [update.queued](#updatequeued)
-      - [update.name](#updatename)
-      - [update.itemsPerSecond](#updateitemspersecond)
-      - [update.secondsRemaining](#updatesecondsremaining)
-  - [v1.x Documentation](#v1x-documentation)
-    - [v1.x - Usage](#v1x---usage)
-    - [v1.x - Full Options Example](#v1x---full-options-example)
-    - [v1.x - Minimal Example](#v1x---minimal-example)
-    - [v1.x - Advanced Example](#v1x---advanced-example)
-    - [v1.x - Alternate Example](#v1x---alternate-example)
-    - [v1.x - Creating a Queue](#v1x---creating-a-queue)
-    - [v1.x - Adding Items](#v1x---adding-items)
-    - [v1.x - Emptying Items](#v1x---emptying-items)
-    - [v1.x - Pausing](#v1x---pausing)
-    - [v1.x - Async Processing](#v1x---async-processing)
-      - [v1.x - Example](#v1x---example)
+  - [Batching](#batching)
+  - [Throttling](#throttling)
+  - [Rate Limiting](#rate-limiting)
+    - [Example](#example)
+  - [Mixing](#mixing)
+  - [Error Handling and Completed Items](#error-handling-and-completed-items)
+  - [Getting the Queue](#getting-the-queue)
+  - [Queue Object](#queue-object)
+    - [queue.name](#queuename)
+    - [queue.empty()](#queueempty)
+    - [queue.pause()](#queuepause)
+    - [queue.add([item][arrayOfItems])](#queueadditem)
+    - [queue.addAwait([item])](#queueaddawaititem)
+    - [queue.progressState([string])](#queueprogressstatestring)
+    - [queue.threads([int])](#queuethreadsint)
+    - [queue.rateLimit([rateLimit, rateLimitSeconds, [rateFidelity]])](#queueratelimitratelimit-ratelimitseconds-ratefidelity)
+    - [queue.stopRateLimit()](#queuestopratelimit)
+    - [queue.complete[]](#queuecomplete)
+    - [queue.errors[]](#queueerrors)
+    - [queue.counts](#queuecounts)
+  - [Progress Updates](#progress-updates)
+    - [Progress Updates on Change Example](#progress-updates-on-change-example)
+    - [Progress Updates on Interval Example](#progress-updates-on-interval-example)
+    - [Child Queues](#child-queues)
+  - [Progress Update Object](#progress-update-object)
+    - [update.percent](#updatepercent)
+    - [update.children](#updatechildren)
+    - [update.state](#updatestate)
+    - [update.queue](#updatequeue)
+    - [update.complete](#updatecomplete)
+    - [update.total](#updatetotal)
+    - [update.threads](#updatethreads)
+    - [update.batch](#updatebatch)
+    - [update.queued](#updatequeued)
+    - [update.name](#updatename)
+    - [update.itemsPerSecond](#updateitemspersecond)
+    - [update.secondsRemaining](#updatesecondsremaining)
 
-## v2.x Documentation
-
-### Usage
+## Usage
 
 I made some pretty significant changes to the qbp 'footprint' in v2. Say goodbye to the bulky code, say hello to streamlined batchy goodness.
 
@@ -93,13 +86,14 @@ async function start(items) {
             threads: 5, // How many items you want to process simultaneously. Default is now the total count of items you initially provide, running them all at once.
             batch: 10, // Default 1 - Anything above 1 will pass that many items as an array to your `each` function.
             name: 'Demo Queue', // An identifier you can use to differentiate multiple queues. Does not need to be a string.
+            parent: parentQueue, // You can supply a queue object as a parent for progress updates to bubble up.
             rateLimit: 500, // Set a maximum number of items that can be processed within rateLimitSeconds.
             rateLimitSeconds: 100, // The timeframe for rate limiting.
             rateFidelity: 20, // Default 16 - How many times you want rate limiting to be checked and adjusted during rateLimitSeconds timeframe.
             rateLimitOnEmpty: true, // Default false - Set this to true to have rate limiting keep going even when there are no items in the queue.
             rateUpdate: (update) => rateUpdate(update),
             progress: (prog) => progressFunc(prog), // Function that gets called with status updates on how the process is going.
-            progressInterval: 1000, // Default 10000 - How often to get status updates in milliseconds.
+            progressInterval: 1000, // Default 'change' - How often to get status updates in milliseconds. By default it will run the progress function whenever there is a change.
             empty: () => emptyFunc(), // Function that gets called when we're out of items.
             error: (err, item, queue) => errorFunc(err, item, queue) // Gets called if an error is thrown by your `each` function. If this isn't supplied, errors will output to console.error().
         }
@@ -124,16 +118,17 @@ async function each(item, queue) { // You can also return a promise or provide a
     }
 }
 
-function progressFunc(prog) {
-    console.log('Percent Complete: ' + prog.percent);
-    console.log('Items Complete: ' + prog.complete);
-    console.log('Total Items: ' + prog.total);
-    console.log('Queued Items: ' + prog.queued);
-    console.log('Threads: ' + prog.threads);
-    console.log('Batch Size: ' + prog.batch);
-    console.log('Items Per Second: ' + prog.itemsPerSecond);
-    console.log('Seconds Remaining: ' + prog.secondsRemaining);
-    console.log('Queue Name: ' + prog.name); // Only if a name has been given in the options.
+function progressFunc(update) {
+    console.log('Percent Complete: ' + update.percent);
+    console.log('Children Queues Percent Complete: ' + update.childPercent);
+    console.log('Items Complete: ' + update.complete);
+    console.log('Total Items: ' + update.total);
+    console.log('Queued Items: ' + update.queued);
+    console.log('Threads: ' + update.threads);
+    console.log('Batch Size: ' + update.batch);
+    console.log('Items Per Second: ' + update.itemsPerSecond);
+    console.log('Seconds Remaining: ' + update.secondsRemaining);
+    console.log('Queue Name: ' + update.name); // Only if a name has been given in the options.
 }
 
 // If you use queue.add() to add more items after the queue has already completed, the empty function will get called every time you run out of items.
@@ -160,7 +155,7 @@ function errorFunc(err, item, queue) {
 }
 ```
 
-### Batching
+## Batching
 
 Need to get a few items at a time? Use the `batch` option.
 
@@ -180,7 +175,7 @@ async function each(batch) {
 }
 ```
 
-### Throttling
+## Throttling
 
 An interesting application of this package is using it to throttle processing of items. For instance, if you have a project that is constantly taking in new data to be processed and you want to cap the number that get processed at once, you might want to try something like this.
 
@@ -204,7 +199,7 @@ function itemsEmpty() {
 }
 ```
 
-### Rate Limiting
+## Rate Limiting
 
 If you need to limit processing your items by a number of items within a timeframe then this should help. Rate limiting adjusts the number of threads running simultaneously and makes sure each item takes a minimum amount of time to process in order to meet limit expectations.
 
@@ -216,7 +211,7 @@ Also, at any time you can stop rate limiting by calling `queue.stopRateLimit()`.
 
 > **Important note!** Rate limiting hijacks your `threads` setting and automatically adjusts it to get the most items processed while remaining within your limits.
 
-#### Example
+### Example
 
 Modifying the Throttling example above, here's how you could do it with rate limiting.
 
@@ -255,7 +250,7 @@ function itemsEmpty() {
 }
 ```
 
-### Mixing
+## Mixing
 
 I found myself nesting queues whenever I needed to loop through multiple arrays. So I added a `mix` function to help with this. Here's what I **was** doing.
 
@@ -296,7 +291,7 @@ var students = ['Billy', 'Jane'];
 The `each` function would get called with every combination of those.
 
 ```js
-function each(teacher, classRoom, student, queue) {
+async function each(teacher, classRoom, student, queue) {
     // 'Mrs. Robinson', 102, 'Billy'
     // 'Mrs. Robinson', 102, 'Jane'
     // 'Mrs. Robinson', 203, 'Billy'
@@ -308,7 +303,7 @@ function each(teacher, classRoom, student, queue) {
 
 > One thing to keep in mind. You only have one `queue` object using this. The `queue.add()` function won't perform the mixing functionality that you get when you pass it in to the `mix()` function. But if you don't need to add any more items while processing, then this works perfect.
 
-### Error Handling and Completed Items
+## Error Handling and Completed Items
 
 If you need to, you can access all items that completed successfully (did not error out) after or throughout processing with `queue.complete`. Similarly, you can access all items that errored with `queue.errors`, which gets an object with the error and the item.
 
@@ -341,7 +336,7 @@ functon onError(error, item, queue) {
 
 If you don't supply an `error` function and your `each` function throws an error, it will get output to `console.error()`. So it's recommended to use proper error handling in your `each` function.
 
-### Getting the Queue
+## Getting the Queue
 
 ```js
 var globalQueue;
@@ -360,415 +355,211 @@ async function option2() {
 
 The `queue` object is also passed to `each`, `error`, `progress`, and `empty` functions whenever they are called.
 
-### Queue Object
+## Queue Object
 
 The queue object is returned by qbp as well as passed to all of the functions you would pass qbp in the options. The queue lets you interact with the process as it is running. Here are the attributes and functions of the queue object.
 
-#### queue.name
+### queue.name
 
 If you set the `name` option, this will have that value.
 
-#### queue.empty()
+### queue.empty()
 
 You can call this function if you want to remove all items yet to be processed from the queue.
 
-#### queue.pause()
+### queue.pause()
 
 Call this function to halt processing without removing items from the queue like `queue.empty()` does.
 
-#### queue.add([item][arrayOfItems])
+### queue.add([item][arrayOfItems])
 
 Pass this function one or an array of items to add them to the queue. Keep in mind that the function expects an array passed in to be an array of items to be processed. If the item you want processed is an array, you would want to wrap it in another array before adding it.
 
-#### queue.addAwait([item])
+### queue.addAwait([item])
 
 Use this function when you want to add an item to an existing queue and wait for it to complete. This will return a `Promise` object which lets you use `await` or `.then()` on the `addAwait()` function. The item will be returned once it is complete. If the item has an unhandled error in your `each` function, the `Promise` will trigger a rejection and return an object with an `error` attribute and an `item` attribute.
 
-#### queue.threads([int])
+### queue.progressState([string])
+
+This gets passed to the progress function. The intent is to call this function at the begining of your each function to tell the user what is currently being processed.
+
+### queue.threads([int])
 
 Pass this function an integer to set how many threads you want the queue to process simultaneously.
 
-#### queue.rateLimit([rateLimit, rateLimitSeconds, [rateFidelity]])
+### queue.rateLimit([rateLimit, rateLimitSeconds, [rateFidelity]])
 
 You can tell the queue to start rate limiting at any time by calling this function and passing in your rate limit options. See [Rate Limiting](#rate-limiting).
 
-#### queue.stopRateLimit()
+### queue.stopRateLimit()
 
 Call this to stop rate limiting.
 
-#### queue.complete[]
+### queue.complete[]
 
 See [Error Handling and Completed Items](#error-handling-and-completed-items).
 
-#### queue.errors[]
+### queue.errors[]
 
 See [Error Handling and Completed Items](#error-handling-and-completed-items).
 
-#### queue.counts
+### queue.counts
 
 This is an object containing attributes: `items` for a total count of items added to the queue, `complete` for total number of items completed, `threads` for now many threads are currently running simultaenously, `queued` for how many items have yet to be processed, and `batch` which is the current batch size.
 
-### Progress Updates
+## Progress Updates
 
-You can supply a `progress` function in your queue options that will receive progress updates, allowing you to create progress bars and status updates to the user. The function will get an object with these attributes.
+You can supply a `progress` function in your queue options that will receive progress updates, allowing you to create progress bars and status updates to the user.
 
-#### update.percent
+### Progress Updates on Change Example
 
-This gives you the percentage (from 0 to 1) of the number of completed items out of the total items added to the queue. Keep in mind, if you add more items as the queue is running the percentage will suddenly go down.
-
-#### update.queue
-
-Supplies the actual queue object. Handy if you're using multiple queues simultaneously with the same progress function.
-
-#### update.complete
-
-How many items have been completely processed.
-
-#### update.total
-
-How many items have been added to the queue.
-
-#### update.threads
-
-How many threads are currently running.
-
-#### update.batch
-
-The max size of each batch getting passed to the `each` function.
-
-#### update.queued
-
-How many items have yet to be processed.
-
-#### update.name
-
-The name given to the queue when setup. Helps to differentiate between multiple queues running at the same time.
-
-#### update.itemsPerSecond
-
-Average number of items that have been processed within a second since last time the Progress function was called.
-
-#### update.secondsRemaining
-
-Estimated number of seconds left to process the queue based on `itemsPerSecond`. If, for some reason, `itemsPerSecond` is `0`, this will be `-1` to signify we can't currently estimate time left. For instance, the first time the `progress` function gets called `secondsRemaining` will be set to `-1`.
-
------------
-
-## v1.x Documentation
-
-### v1.x - Usage
-
-To install run `npm install qbp`.
-
-If you're not using Typescript, you'll probably want to use this import statement.
-
-`var qbp = require('qbp').qbp;`
-
-Using TypeScript? You should be able to import the project easily.
-
-`import { qbp, QbpProgress } from 'qbp';`.
-
-### v1.x - Full Options Example
+If you supply a `progress` function in your options but not a `progressInterval` option, then your progress function will get called everytime there is a change such as a when `queue.progressStatus()` gets called or an item has finished processing.
 
 ```js
-function runQbp(items) {
-    qbp.create({
-        items: items,
-        name: 'ItemQueue', // Optional - The name is passed to the progress function, helpful with multiple queues running simultaneously
-        process: addItemToDatabase, // Required - Function of what you want to happen to each item. Gets passed the item and a callback function.
-        threads: 5, // Default 1 - Number of items getting processed concurrently
-        async: false, // Default false - Allows you to specify that the progress function is an async function
-        progress: progressFunc, // Optional - Function that gets called with status updates on how the process is going
-        progressInterval: 1000, // Default 10000 - How often to get status updates in milliseconds
-        empty: emptyFunc // Optional - Function that gets called when we're out of items
-    });
-}
+const qbp = require('qbp');
 
-// This function will receive the current item in the items array,
-// a callback function, and the instance of the queue you created.
-function addItemToDatabase(item, done, queue) {
-    _db.insert(item, function (error, results) {
-        // Whenever you're finished, simply call the
-        // 'done' function to move on to the next item.
-
-        if (checkSomething) {
-            queue.empty(); // Clears out all queued items.
-        } else if (somethingElse) {
-            queue.pause(); // Temporarily stops processing items.
-        } else if (yetAnotherCheck) {
-            queue.resume(); // Starts a queue back up after being paused.
-        } else if (lastCheck) {
-            queue.add(results); // Add more items to the queue at any time.
-        }
-
-        done();
-    });
-}
-
-function progressFunc(prog) { // In Typescript, this parameter is a QbpProgress object
-    console.log('Percent Complete: ' + prog.percent);
-    console.log('Items Complete: ' + prog.complete);
-    console.log('Total Items: ' + prog.total);
-    console.log('Queued Items: ' + prog.queued);
-    console.log('Threads: ' + prog.threads);
-    console.log('Items Per Second: ' + prog.itemsPerSecond);
-    console.log('Seconds Remaining: ' + prog.secondsRemaining);
-}
-
-function emptyFunc() {
-    console.log('Done!');
-}
-```
-
-### v1.x - Minimal Example
-
-```js
-function runQbp(items) {
-    qbp.create({
-        items: items,
-        process: addItemToDatabase, // Required - Function of what you want to happen to each item. Gets passed the item and a callback function.
-        empty: emptyFunc // Optional - Function that gets called when we're out of items
-    });
-}
-
-function addItemToDatabase(item, done, queue) {
-    _db.insert(item, function (error, results) {
-        // Whenever you're finished, simply call the
-        // 'done' function to move on to the next item.
-        done();
-    });
-}
-
-function emptyFunc() {
-    console.log('Done!');
-}
-```
-
-### v1.x - Advanced Example
-
-In this example we're going to pair Student records in a database with User records in a database based on their email address fields. If it can't find a user with that email address we'll assume the student record is bad and delete it. In this example, we add records to their appropriate queue immediately, processing them as they're ready and throttled by the thread counts for each queue.
-
-```js
-
-// Setup all the queues needed
-var findUsersQueue = new qbp({
-    name: 'FindUsers',
-    progress: progressOutput,
-    threads: 50,
-    empty: onEmpty,
-    process: function (student, done, queue) {
-        db.getUserByEmail(student.email_address, function (result) {
-            // Add student records to the queues to update or delete as needed.
-            // These queues will start working immediately without this queue needing to be finished.
-            if (result) {
-                student.user_id = result.id;
-                updateStudentsQueue.add(student); // <----<<<
-            }
-            else {
-                deleteStudentQueue.add(student); // <----<<<
-            }
-
-            done();
-        });
-    }
-});
-
-var updateStudentsQueue = new qbp({
-    name: 'UpdateStudents',
-    progress: progressOutput,
-    threads: 50,
-    empty: onEmpty,
-    process: function (student, done, queue) {
-        db.updateStudent(student, function () {
-            done();
-        });
-    }
-});
-
-var deleteStudentQueue = new qbp({
-    name: 'DeleteBadRecords',
-    progress: progressOutput,
-    threads: 1000,
-    empty: onEmpty,
-    process: function (student, done, queue) {
-        db.deleteStudent(student, function () {
-            done();
-        });
-    }
-});
-
-// Kicking off the process here
-function start() {
-    db.getStudentRecords(function (students) {
-        // Queueing up students for the first step
-        findUsersQueue.add(students);
-    });
-}
-
-function onEmpty() {
-    // Once all of the queues are empty that means you're done!
-    if (findUsersQueue.status === 'empty' &&
-        updateStudentsQueue.status === 'empty' &&
-        deleteStudentQueue.status === 'empty') {
-        console.log('Done!');
-    }
-}
-
-// Example output:
-// DeleteBadRecords - 226063 completed items - 501914 total items - 2429/s - 113 seconds remaining
-function progressOutput(vals) {
-    console.log(vals.name + ' - ' + vals.complete + ' completed items - ' + vals.total + ' total items - ' + vals.itemsPerSecond + '/s - ' + vals.secondsRemaining + ' seconds remaining');
-}
-
-```
-
-### v1.x - Alternate Example
-
-Another way to do this would be to stage the process. And the subsequent stage doesn't run until the previous stage is finished. So this process is `Start -> Get Student Records -> Find User Records -> Update Student Records -> Delete Bad Records -> Complete`.
-
-```js
-var students = [];
-var foundStudents = [];
-var badStudentRecords = [];
-
-var app = {};
-
-app.start = function start() {
-    // Using qbp to call the functions that make up this process.
-    // Better than creating a nested tree of callback functions.
-    var functions = [
-        'getStudents',
-        'findUsers',
-        'updateStudents',
-        'deleteBadRecords'
-    ];
-
-    console.log('Starting...');
-    qbp.create({
-        items: functions,
-        empty: function () {
-            console.log('Done!');
-        },
-        process: function (func, done, queue) {
-            app[func](done);
-        }
+async function start (items) {
+    await qbp(items, (...args) => each(...args), {
+        progress: (...args) => progress(...args)
     })
 }
 
-app.getStudents = function getStudents(callback) {
-    db.getStudentRecords(function (results) {
-        students = results;
-        callback();
-    });
+async function each (item, queue) {
+    queue.progressStatus(`Currently processing ${item.name}.`)
+    // Do something with the item.
 }
 
-app.findUsers = function findUsers(callback) {
-    qbp.create({
-        name: 'FindUsers',
-        items: students,
-        progress: progressOutput,
-        threads: 50,
-        empty: callback,
-        process: function (student, done, queue) {
-            db.getUserByEmail(student.email_address, function (result) {
-                if (result) {
-                    student.user_id = result.id;
-                    foundStudents.push(student);
-                }
-                else {
-                    badStudentRecords.push(student);
-                }
-
-                done();
-            });
-        }
-    });
+function progress (update) {
+    console.log('Percent Complete: ' + update.percent);
+    console.log('State: ' + update.state);
+    console.log('Items Complete: ' + update.complete);
+    console.log('Total Items: ' + update.total);
+    console.log('Queued Items: ' + update.queued);
+    console.log('Threads: ' + update.threads);
+    console.log('Batch Size: ' + update.batch);
+    console.log('Items Per Second: ' + update.itemsPerSecond);
+    console.log('Seconds Remaining: ' + update.secondsRemaining);
 }
-
-app.updateStudents = function updateStudents(callback) {
-    qbp.create({
-        name: 'UpdateStudents',
-        items: foundStudents,
-        progress: progressOutput,
-        threads: 50,
-        empty: callback,
-        process: function (student, done, queue) {
-            db.updateStudent(student, function () {
-                done();
-            });
-        }
-    });
-}
-
-app.deleteBadRecords = function deleteBadRecords(callback) {
-    qbp.create({
-        name: 'DeleteBadRecords',
-        items: badStudentRecords,
-        progress: progressOutput,
-        threads: 1000,
-        empty: callback,
-        process: function (student, done, queue) {
-            db.deleteStudent(student, function () {
-                done();
-            });
-        }
-    });
-}
-
-// Example Output:
-// DeleteBadRecords - 53% - 2932/s
-app.progressOutput = function progressOutput(vals) {
-    var perc = Math.round(vals.percent * 100);
-    console.log(vals.name + ' - ' + perc + '% - ' + vals.itemsPerSecond + '/s');
-}
-
 ```
 
-### v1.x - Creating a Queue
+### Progress Updates on Interval Example
 
-You can create a queue [aka, an instance of qbp] in a couple different ways. First, as in the examples above you can use the static function `qbp.create(options)`. This returns the instance of the queue so you could set it to a variable if you wished, `var queue = qbp.create(options);`. You could also use the `new` operator `var queue = new qbp(options);`. Both ways are valid, whatever you prefer.
-
-### v1.x - Adding Items
-
-You can add an individual item or an array of items by passing them into `queue.add()`. Adding items immediately starts processing, but you can always add more items to the queue even after it's been empty.
-
-### v1.x - Emptying Items
-
-If you're done with your queue and don't want any more items processed, you can call `queue.empty()` to clear out queued up items. Any items that have already begun processing will still be finished. Once those are finished, the `empty` callback function supplied in the options when creating the queue will get called. You can still add more items to start the queue back up again at any time.
-
-### v1.x - Pausing
-
-If you need to stop your queue from processing for any reason you can call `queue.pause()`. And you can resume at any time by calling `queue.resume()`. Adding new items will also restart the queue.
-
-### v1.x - Async Processing
-
-By default `options.async` is set to false. But if you set it to true and supply an async function to `options.process`, you will only get `item` and `queue` parameters. You won't recieve a `done` function. You can use the `await` keyword throughout the process function or return a `Promise` object and qbp will handle it appropriately.
-
-#### v1.x - Example
+The `progressInterval` option takes a value of milliseconds. Your `progress` function will get called that often and won't be called by items being completed or `queue.progressStatus()` getting called.
 
 ```js
-function runQbp(items) {
-    qbp.create({
-        items: items,
-        async: true,
-        process: addItemToDatabase, // Required - Function of what you want to happen to each item. Gets passed the item and a callback function.
-        empty: emptyFunc // Optional - Function that gets called when we're out of items
-    });
+const qbp = require('qbp');
+
+async function start (items) {
+    await qbp(items, (...args) => each(...args), {
+        progress: (...args) => progress(...args),
+        progressInterval: 1000 // Run every second.
+    })
 }
 
-async function addItemToDatabase(item, queue) {
-    var results = await _db.insert(item);
-
-    if (results.status === 'error') {
-        await logBadRecord(item);
-    }
+async function each (item, queue) {
+    queue.progressStatus(`Currently processing ${item.name}.`)
+    // Do something with the item.
 }
 
-async function logBadRecord(item) {
-    await _db.error(item);
-}
-
-function emptyFunc() {
-    console.log('Done!');
+function progress (update) {
+    console.log('Percent Complete: ' + update.percent);
+    console.log('State: ' + update.state);
+    console.log('Items Complete: ' + update.complete);
+    console.log('Total Items: ' + update.total);
+    console.log('Queued Items: ' + update.queued);
+    console.log('Threads: ' + update.threads);
+    console.log('Batch Size: ' + update.batch);
+    console.log('Items Per Second: ' + update.itemsPerSecond);
+    console.log('Seconds Remaining: ' + update.secondsRemaining);
 }
 ```
+
+### Child Queues
+
+Here's a great way to setup tiered progress updates. Like when you need to have a secondary progress bar for a "child process" that could be slow to make a noticable change in your primary progress bar. You can set the `parent` option in `qbp` to register this new queue as a child queue. Now progress updates will be reported to its parent. There's no limit to how deep this can go, so your child queues can have child queues of their own and the progress updates will bubble up to the parent. Child queues can have their own `progress` functions and `progressInterval` settings for their own output, and their progress will still be reported up the chain.
+
+Children remove themselves from the parent when the queue is empty and re-add themselves to the parent when more items have been added.
+
+```js
+const qbp = require('qbp');
+const classes = ['Biology', 'Calculus', 'AP English', 'Intro To Web Development'];
+
+async function processStudents (students) {
+    await qbp(students, (...args) => each(...args), {
+        progress: (...args) => progress(...args)
+    })
+}
+
+async function processStudent (student, queue) {
+    queue.progressStatus(`Currently processing ${student.name}.`)
+    student.classes = []; // Do some stuff to the student item
+    await qbp(classes, (...args) => addStudentToClass(student, ...args), { parent: queue }) // Setting the parent option
+}
+
+async function addStudentToClass (student, class, queue) {
+    // The queue you're getting here is a child of the queue setup in processStudents()
+    queue.progressStatus(`Adding ${student.name} to ${class}.`);
+    // Do whatever to add the student to the class.
+}
+
+function progress (update) {
+    console.log('State: ' + update.state); // Use this for your main progress output.
+    console.log('Percent Complete: ' + update.percent); // Update your progress bar with this.
+    for (var i = 0; i < update.children.length; i++) {
+        console.log('Child State: ' + update.children[i].state); // Use this for a secondary progress output.
+        console.log('Children Percent Complete: ' + update.children[i].percent); // Update a secondary progress bar with this.
+    }
+}
+```
+
+## Progress Update Object
+
+The `progress` function will get an object with these attributes.
+
+### update.percent
+
+This gives you the percentage (from 0 to 1) of the number of completed items out of the total items added to the queue. Keep in mind, if you add more items as the queue is running the percentage will suddenly go down.
+
+### update.children
+
+If you set this queue as the parent of another queue or queues this will be set to an array of update objects from those child queues. This allows you to have one progress update function from your top-most queue and report out the updates from all queues below it.
+
+### update.state
+
+A text value of what your queue is currently doing based on what you pass into `queue.progressState()`.
+
+### update.queue
+
+Supplies the actual queue object. Handy if you're using multiple queues simultaneously with the same progress function.
+
+### update.complete
+
+How many items have been completely processed.
+
+### update.total
+
+How many items have been added to the queue.
+
+### update.threads
+
+How many threads are currently running.
+
+### update.batch
+
+The max size of each batch getting passed to the `each` function.
+
+### update.queued
+
+How many items have yet to be processed.
+
+### update.name
+
+The name given to the queue when setup. Helps to differentiate between multiple queues running at the same time.
+
+### update.itemsPerSecond
+
+Average number of items that have been processed within a second since last time the Progress function was called.
+
+### update.secondsRemaining
+
+Estimated number of seconds left to process the queue based on `itemsPerSecond`. If, for some reason, `itemsPerSecond` is `0`, this will be `-1` to signify we can't currently estimate time left. For instance, the first time the `progress` function gets called `secondsRemaining` will be set to `-1`.
