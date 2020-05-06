@@ -144,7 +144,7 @@ function rateUpdate(update) {
     update.queue; // The queue object.
     update.projectedCount; // The number of items we're projecting to process at the current rate by next update.
     update.projectedRate; // The items per second rate we're projecting by next process
-    update.minimumThreadtime; // The minimum amount of time a thread is allowed to run to meet rate limiting expectations, in milliseconds.
+    update.minimumThreadTime; // The minimum amount of time a thread is allowed to run to meet rate limiting expectations, in milliseconds.
     update.currentThreads; // The current number of threads running.
     update.targetThreads; // The number of threads we're adjusting to.
     update.currentRatePerSecond; // The number of items we processed per second since the last update.
