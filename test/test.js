@@ -750,11 +750,12 @@ describe('Rate Limiting', function () {
                     itemCount++
                     await waiter(item);
                 };
-                
-                var rateUpdateRan = false;
-                const rateUpdate = ({ currentThreads }) => {
-                    assert.equal(currentThreads, 2);
-                    rateUpdateRan = true;
+
+                var threadSum = 0;
+                var updateCount = 0;
+                const rateUpdate = ({ currentThreads, threadDiff }) => {
+                    updateCount++
+                    threadSum += currentThreads
                 }
 
                 const error = function (err) {
@@ -780,9 +781,9 @@ describe('Rate Limiting', function () {
                 var endTime = new Date();
 
                 var timeSpan = endTime.getTime() - startTime.getTime();
+                assert.equal(Math.round(threadSum / updateCount), 2); // Make sure if averages to 2 threads.
                 assert.equal(queue.errors.length, 0);
-                assert.ok(rateUpdateRan);
-                assert.ok(timeSpan + ACCEPTABLE_THRESHOLD >= (GOAL_TIME * 1000));
+                assert.ok(timeSpan >= (GOAL_TIME * 1000));
                 assert.ok(timeOutRan);
                 resolve();
             } catch (err) {
@@ -808,7 +809,7 @@ describe('Rate Limiting', function () {
                 };
                 
                 var rateUpdateRan = false;
-                const rateUpdate = () => {
+                const rateUpdate = ({ projectedCount, currentThreads, neededChange, threadDiff }) => {
                     rateUpdateRan = true;
                 }
 
@@ -830,7 +831,7 @@ describe('Rate Limiting', function () {
                 var timeSpan = endTime.getTime() - startTime.getTime();
                 assert.equal(queue.errors.length, 0);
                 assert.ok(rateUpdateRan);
-                assert.ok(timeSpan + ACCEPTABLE_THRESHOLD >= (GOAL_TIME * 1000));
+                assert.ok(timeSpan >= (GOAL_TIME * 1000));
                 resolve();
             } catch (err) {
                 reject(err);
@@ -879,7 +880,7 @@ describe('Rate Limiting', function () {
 
                 var timeSpan = endTime.getTime() - startTime.getTime();
                 assert.equal(queue.errors.length, 0);
-                assert.ok(timeSpan < (GOAL_TIME * 1000) + ACCEPTABLE_THRESHOLD);
+                assert.ok(timeSpan < (GOAL_TIME * 1000));
                 assert.ok(rateUpdateRan);
                 resolve();
             } catch (err) {

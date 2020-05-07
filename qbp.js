@@ -368,8 +368,8 @@ function qbp (...args) {
                     const projectedRate = projectedCount / secondsInRate
                     const neededChange = targetRatePerSecond - projectedRate
 
-                    const threadDiff = neededChange / (currentThreadRate || 0.1)
-                    const threadsToAdd = Math.round(threadDiff)
+                    const threadDiff = currentThreadRate > 0 ? neededChange / currentThreadRate : 0
+                    const threadsToAdd = (threadDiff % 1) > 0.8 ? Math.ceil(threadDiff) : Math.floor(threadDiff)
                     var targetThreads = (threadCount + threadsToAdd)
                     if (queueItems.length < targetThreads) targetThreads = queueItems.length
                     if (targetThreads < 1) targetThreads = 1
@@ -482,7 +482,7 @@ function qbp (...args) {
 
                         // For rate limiting. If we're going faster than we should, slow down.
                         if (startTime) {
-                            var threadTime = (new Date()).getTime() - startTime.getTime()
+                            var threadTime = ((new Date()) - startTime)
                             if (threadTime < minimumThreadTime) await waiter(minimumThreadTime - threadTime)
                         }
 
