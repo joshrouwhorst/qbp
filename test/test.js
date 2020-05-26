@@ -574,12 +574,6 @@ describe('Rate Limiting', function () {
                 }
 
                 var startTime = new Date();
-                var timeOutRan = false;
-
-                setTimeout(() => {
-                    timeOutRan = true;
-                    assert.ok(itemCount <= RATE_MAX);
-                }, RATE_TIME * 1000)
 
                 var { errors } = await qbp(items, (...args) => each(...args), {
                     rateLimit: RATE_MAX,
@@ -593,7 +587,6 @@ describe('Rate Limiting', function () {
                 var timeSpan = endTime.getTime() - startTime.getTime();
                 assert.equal(errors.length, 0);
                 assert.ok(timeSpan + ACCEPTABLE_THRESHOLD >= (GOAL_TIME * 1000));
-                assert.ok(timeOutRan);
                 resolve();
             } catch (err) {
                 reject(err);
