@@ -1,3 +1,9 @@
+// TODO:
+// Need to have the progress function provide status on all currently queued items.
+// Need to have thread function utilize the Item, AddGroup, and ItemPackage classes.
+// Need to make sure that the user knows when an item is complete.
+// Should probably provide our own statuses somehow so they know if an item is queued, processing, or complete as well as pass along their status.
+
 function qbp (...args) {
     var { items, each, opts } = parseArgs(...args)
 
@@ -30,13 +36,12 @@ function qbp (...args) {
 
     // Global variables.
     var queueItems = []
+    var activeItems = []
     var running = false
     var itemCount = 0
     var completeCount = 0
     var threadCount = 0
     var process = null
-    var _resolve
-    var _reject
 
     var rateLimitValid = false
     var rateLimitArr = []
@@ -48,6 +53,7 @@ function qbp (...args) {
     var rateLimitCanRun = false
     var targetRatePerSecond = -1
     var progressOnChange = opts.progressInterval === 'change' && (opts.progress || opts.parent)
+    var progressLoopRunning = false
 
     // Create the queue object.
     var queue = new Queue()
@@ -59,11 +65,10 @@ function qbp (...args) {
     queue.resume = resume
     queue.pause = pause
     queue.add = add
-    queue.addAwait = addAwait
+    queue.each = setEach
     queue.threads = threads
     queue.rateLimit = setRateLimit
     queue.stopRateLimit = stopRateLimit
-    queue.progressState = setProgressState
     queue.complete = []
     queue.errors = []
     queue.counts = {
@@ -76,39 +81,33 @@ function qbp (...args) {
 
     // Internally used items attached to the queue.
     queue._ = {
-        children: [],
-        addChild: addChild,
-        removeChild: removeChild,
-        childProgress: childProgress,
-        progress: QbpProgress.Default(queue), // Set the initial progress object.
-        progressState: null,
-        completeWithChildren: 0
+        setItemStatus,
+        progress: QbpProgress.Default(queue) // Set the initial progress object.
     }
 
     // If no thread count is specified, process all items at once.
     if (opts.threads === null && items) opts.threads = items.length
 
-    var returnValue = null
-
-    if (items) {
-        add(items)
-    }
-
     queue.rateLimit(opts.rateLimit, opts.rateLimitSeconds, opts.rateFidelity)
 
-    // If no each function given, return the queue object.
-    if (!each) {
-        queue.each = setEach
-        returnValue = queue
-    } else if (!items) { // Haven't supplied items yet, so just return the queue.
-        returnValue = queue
-    } else { // Otherwise, return the promise object from takeEach.
-        returnValue = setEach(each)
+    var returnValue = null
+
+    if (each) {
+        setEach(each)
     }
 
-    // Make sure we can tell the difference between when we're initially setting up the queue,
-    // and when it has already digested all of the parameters.
-    queue.status = 'waiting'
+    if (items) {
+        returnValue = add(items)
+    } else {
+        returnValue = { queue }
+    }
+
+    // Make sure we're not already running yet.
+    if (queue.status === 'initializing') {
+        // Now we can tell the difference between when we're initially setting up the queue,
+        // and when it has already digested all of the parameters.
+        queue.status = 'waiting'
+    }
 
     return returnValue
 
@@ -127,20 +126,14 @@ function qbp (...args) {
     }
 
     function setEach (func) {
-        return new Promise((resolve, reject) => {
-            try {
-                process = func
+        process = func
+        // Make sure we're running the queue now that we know what to do with it.
+        resume()
 
-                // Save the resolve and reject functions to be called when queue is finished.
-                _resolve = resolve
-                _reject = reject
-
-                // Make sure we're running the queue now that we know what to do with it.
-                queue.resume()
-            } catch (err) {
-                reject(err)
-            }
-        })
+        // If we already have items, return the promise for their AddGroup so they can await queue.each()
+        if (queueItems.length > 0) {
+            return queueItems[0].addGroup.promise
+        }
     }
 
     function threads (threadCount) {
@@ -151,38 +144,39 @@ function qbp (...args) {
     }
 
     function add (itemOrArray) {
-    // Can take a single item or an array of items.
-        if (itemOrArray instanceof Array) {
-            itemCount += itemOrArray.length
-            queueItems = queueItems.concat(itemOrArray)
+        // Can take a single item or an array of items.
+        if (!(itemOrArray instanceof Array)) {
+            itemOrArray = [itemOrArray]
         } else {
-            itemCount++
-            queueItems.push(itemOrArray)
+            // Get rid of original array reference so we're not
+            // filling their array with Item objects.
+            itemOrArray = [].concat(itemOrArray)
         }
+
+        itemCount += itemOrArray.length
+
+        var addGroup
+
+        // If we don't have an each function yet, add all the items to the same AddGroup.
+        // Lets us return one promise when the each function gets set.
+        if (!progress && queueItems.length > 0) {
+            addGroup = queueItems[0].addGroup
+            addGroup.addItems(itemOrArray)
+        } else {
+            addGroup = new AddGroup(itemOrArray, queue)
+        }
+
+        queueItems = queueItems.concat(itemOrArray)
 
         updateCounts()
 
         // They didn't manually set threads and didn't pass in items, now we set threads to the first itemCount we're given.
         if (opts.threads === null) opts.threads = itemCount
 
-        // They passed in the each without items. Now that we have items, set the process.
-        if (queue.status !== 'initializing' && each && !process) setEach(each)
-
         // If we have an each function and set it to process, make sure that we're running the queue.
         if (process) resume(true)
-    }
 
-    function addAwait (item) {
-        return new Promise((resolve, reject) => {
-            try {
-                item = new Item(item)
-                item.resolve = resolve
-                item.reject = reject
-                queue.add(item)
-            } catch (err) {
-                reject(err)
-            }
-        })
+        return addGroup.promise
     }
 
     function empty () {
@@ -191,23 +185,19 @@ function qbp (...args) {
     }
 
     function resume (newItem) {
-    // Make sure we're not currently running and make sure we're not unpausing just because we added a new item.
-    // If they paused the queue, they should be able to add new items without restarting it until they manually call resume().
-        if (!running && (!newItem || queue.status !== 'paused')) {
+        var canRun = queueItems.length > 0 && !!progress && !running
+        // Make sure we're not currently running and make sure we're not unpausing just because we added a new item.
+        // If they paused the queue, they should be able to add new items without restarting it until they manually call resume().
+        if (canRun && (!newItem || queue.status !== 'paused')) {
             queue.status = 'running'
             running = true
             rateLimitCanRun = true
             rateLimit()
 
-            // Register with the parent queue.
-            if (opts.parent) opts.parent._.addChild(queue)
+            // Start up the progress loop.
+            ensureProgressLoopRunning()
 
             setupThreads()
-
-            // Start up the progress loop.
-            if (queueItems.length > 0 || completeCount < itemCount) {
-                progress()
-            }
         }
     }
 
@@ -219,16 +209,17 @@ function qbp (...args) {
         ratePause = false
     }
 
-    function addChild (childQueue) {
-        // Make sure we only add once.
-        if (!queue._.children.find(c => c === childQueue)) {
-            queue._.children.push(childQueue)
-        }
-    }
+    async function ensureProgressLoopRunning () {
+        if (progressLoopRunning) return
+        progressLoopRunning = true
 
-    function removeChild (childQueue) {
-        var idx = queue._.children.findIndex(c => c === childQueue)
-        if (idx > -1) queue._.children.splice(idx, 1)
+        // Set timer to fire this again.
+        while (running && !progressOnChange && opts.progress) {
+            progress()
+            await waiter(opts.progressInterval)
+        }
+
+        progressLoopRunning = false
     }
 
     function progress (once) {
@@ -242,9 +233,6 @@ function qbp (...args) {
         if (itemCount > 0) perc = completeCount / itemCount
         else perc = 0
 
-        // Get array of updates from all the children.
-        var children = queue._.children.map(c => c._.progress)
-
         // Figure out how many items per second are being processed.
         var newItemsCompleted = completeCount - lastCompleteCount
         var seconds = (now - queue._.progress.dateTime) / 1000
@@ -257,13 +245,12 @@ function qbp (...args) {
         if (!itemsPerSecond) secondsRemaining = -1 // Signal that we currently don't have an estimate.
         else secondsRemaining = Math.ceil(queueItems.length / itemsPerSecond)
 
-        // Setting this in other functions, so just continue the values on to the next progress update.
-        var state = queue._.progress.state
+        var statuses = queueItems.map(i => { return { item: i.value, stage: i.stage } })
+        statuses = statuses.concat(activeItems.map(i => { return { item: i.value, stage: i.stage, status: i.status } }))
 
         queue._.progress = new QbpProgress({
             percent: perc,
-            children,
-            state,
+            statuses,
             dateTime: now,
             complete: completeCount,
             total: itemCount,
@@ -277,25 +264,10 @@ function qbp (...args) {
 
         // Send notifications.
         if (opts.progress) opts.progress(queue._.progress)
-        if (opts.parent) opts.parent._.childProgress(queue._.progress.state)
-
-        // Set timer to fire this again.
-        if (!once && running && !progressOnChange && (opts.progress || opts.parent)) {
-            setTimeout(progress, opts.progressInterval)
-        }
     }
 
-    // Set a text state for what the queue is currently doing.
-    function setProgressState (state) {
-        queue._.progress.state = state
+    function setItemStatus () {
         if (progressOnChange) progress(true)
-    }
-
-    // Register the current state of progress for children.
-    function childProgress (state) {
-        queue._.progress.childState = state
-        if (opts.parent) setProgressState(state) // If we're not the top-most queue, bubble status changes up.
-        else if (progressOnChange) progress(true)
     }
 
     function setRateLimit (maxRate, rateLimitSeconds, fidelity) {
@@ -420,83 +392,81 @@ function qbp (...args) {
 
             // Call their empty function if they have one.
             opts.empty(queue)
-
-            log('Resolving')
-            _resolve(queue)
         }
     }
 
     function setupThreads () {
-        try {
-            // Make sure we have as many threads as they want running.
-            while (threadCount < opts.threads && running && queueItems.length > threadCount) {
-                threadCount++;
+        // Make sure we have as many threads as they want running.
+        while (threadCount < opts.threads && running && queueItems.length > threadCount) {
+            threadCount++
 
-                (async () => {
-                    let isRunning = running
-
-                    // Run this thread as long as there are items, we still match the thread count, and we're not paused.
-                    while (queueItems.length > 0 && threadCount <= opts.threads && isRunning) {
-                        var item, startTime
-
-                        // For rate limiting. If we're going faster than we should, slow down.
-                        if (slowDownThreads) startTime = new Date()
-                        if (rateLimitArr.length > 0) rateLimitArr[0]++
-
-                        // Peel off a batch of items or a single item.
-                        if (opts.batch > 1) item = queueItems.splice(0, opts.batch)
-                        else item = queueItems.splice(0, 1)[0]
-
-                        var itemObject
-                        if (item instanceof Item) {
-                            itemObject = item
-                            item = item.value
-                        }
-
-                        updateCounts()
-
-                        try {
-                            // Call the each function.
-                            if (opts.spreadItem) await process(...item, queue)
-                            else await process(item, queue)
-
-                            // Keep track of completed items.
-                            queue.complete.push(item)
-                            if (itemObject) itemObject.resolve(item)
-                        } catch (err) {
-                            // If they have an error function call that, otherwise output to console.
-                            if (opts.error !== noop && opts.spreadItem) opts.error(err, ...item, queue)
-                            else if (opts.error !== noop) opts.error(err, item, queue)
-                            else console.error(err)
-
-                            // Keep track of items that had errors.
-                            var errObj = { error: err, item: item }
-                            queue.errors.push(errObj)
-
-                            if (itemObject) itemObject.reject(errObj)
-                        }
-
-                        // The completeCount always tracks individual items within the array.
-                        if (opts.batch > 1) completeCount += item.length
-                        else completeCount++
-
-                        // For rate limiting. If we're going faster than we should, slow down.
-                        if (startTime) {
-                            var threadTime = ((new Date()) - startTime)
-                            if (threadTime < minimumThreadTime) await waiter(minimumThreadTime - threadTime)
-                        }
-
-                        isRunning = running
-                        if (progressOnChange) progress(true)
-                    }
-
-                    // Figure out if we're done.
-                    threadComplete()
-                })()
-            }
-        } catch (err) {
-            _reject(err)
+            setupThread()
         }
+    }
+
+    async function setupThread () {
+        let isRunning = running
+
+        // Run this thread as long as there are items, we still match the thread count, and we're not paused.
+        while (queueItems.length > 0 && threadCount <= opts.threads && isRunning) {
+            var startTime
+
+            // For rate limiting. If we're going faster than we should, slow down.
+            if (slowDownThreads) startTime = new Date()
+            if (rateLimitArr.length > 0) rateLimitArr[0]++
+
+            var items = queueItems.splice(0, opts.batch)
+            var values = items.map(i => i.value)
+
+            items.forEach(i => { i.stage = 'processing' })
+            activeItems = activeItems.concat(items)
+
+            updateCounts()
+
+            var pack = new ItemPackage(items, queue)
+
+            try {
+                // Call the each function.
+                if (opts.spreadItem) await process(...values[0], pack)
+                else if (opts.batch > 1) await process(values, pack)
+                else await process(values[0], pack)
+
+                // Keep track of completed items.
+                items.forEach((item) => { item.complete() })
+            } catch (err) {
+                // If they have an error function call that.
+                if (opts.error !== noop && opts.spreadItem) opts.error(err, ...values, pack)
+                else if (opts.error !== noop && opts.batch > 1) opts.error(err, values, pack)
+                else if (opts.error !== noop) opts.error(err, values[0], pack)
+
+                // Keep track of items that had errors and pass it to the resolve.
+                items.forEach((item) => {
+                    var errObj = { error: err, item: item.value }
+                    item.error(errObj)
+                })
+            }
+
+            // The completeCount always tracks individual items within the array.
+            completeCount += items.length
+
+            // For rate limiting. If we're going faster than we should, slow down.
+            if (startTime) {
+                var threadTime = ((new Date()) - startTime)
+                if (threadTime < minimumThreadTime) await waiter(minimumThreadTime - threadTime)
+            }
+
+            isRunning = running
+            if (progressOnChange) progress(true)
+
+            // Remove from active items
+            items.forEach((item) => {
+                var idx = activeItems.findIndex(i => i === item)
+                activeItems.splice(idx, 1)
+            })
+        }
+
+        // Figure out if we're done.
+        threadComplete()
     }
 }
 
@@ -513,15 +483,102 @@ function Queue () {
     this.counts = null
 }
 
-function parseArgs (...args) {
-    // Figuring out which arguments are which.
-    var items = args.find((arg) => Array.isArray(arg))
-    var each = args.find((arg) => typeof arg === 'function')
-    var opts = args.find((arg) => arg !== items && arg !== each)
+function Item (value, addGroup) {
+    this.value = value
+    this.addGroup = addGroup
+    this.stage = 'queued'
+    this.status = null
 
-    if (!opts) opts = {}
+    this.setStatus = (status) => {
+        this.status = status
+        this.addGroup.queue._.setItemStatus()
+    }
 
-    return { items, each, opts }
+    this.complete = () => {
+        this.stage = 'complete'
+        this.addGroup.complete(this)
+    }
+
+    this.error = (err) => {
+        this.stage = 'error'
+        this.addGroup.error(err)
+    }
+}
+
+function ItemPackage (items, queue) {
+    this._items = items
+    this.queue = queue
+    this.setStatus = (status) => {
+        this._items.forEach(i => i.setStatus(status))
+    }
+}
+
+function AddGroup (items, queue) {
+    this.resolve = null
+    this.promise = null
+    this.total = 0
+    this.completed = []
+    this.errors = []
+
+    this.queue = queue
+
+    this.promise = new Promise((resolve) => {
+        this.resolve = resolve
+    })
+
+    // Allows us to add more items after initilization
+    this.addItems = (items) => {
+        this.total = items.length + this.total
+        for (let i = 0; i < items.length; i++) {
+            items[i] = new Item(items[i], this)
+        }
+    }
+
+    this.complete = (item) => {
+        this.completed.push(item.value)
+        if ((this.completed.length + this.errors.length) >= this.total) this.resolve({ queue: this.queue, completed: this.completed, errors: this.errors })
+    }
+
+    this.error = (err) => {
+        this.errors.push(err)
+        if ((this.completed.length + this.errors.length) >= this.total) this.resolve({ queue: this.queue, completed: this.completed, errors: this.errors })
+    }
+
+    this.addItems(items)
+}
+
+function QbpProgress ({ percent, statuses, children, dateTime, complete, total, threads, queued, itemsPerSecond, secondsRemaining, batchSize, queue }) {
+    this.percent = percent
+    this.statuses = statuses
+    this.complete = complete
+    this.total = total
+    this.threads = threads
+    this.queued = queued
+    this.itemsPerSecond = itemsPerSecond
+    this.batch = batchSize
+    this.queue = queue
+    this.secondsRemaining = secondsRemaining
+    this.dateTime = dateTime
+
+    if (queue.name) {
+        this.name = queue.name
+    }
+}
+
+QbpProgress.Default = (queue) => {
+    return new QbpProgress({
+        percent: 0,
+        statuses: [],
+        dateTime: new Date(),
+        complete: 0,
+        total: 0,
+        threads: 0,
+        queued: 0,
+        itemsPerSecond: 0,
+        seconds: -1,
+        batchSize: 0,
+        queue
+    })
 }
 
 // Allows you to loop through multiple arrays at once.
@@ -539,46 +596,15 @@ qbp.cartesian = function cartesian (arr) {
     return k(...arr)
 }
 
-function Item (value, id) {
-    this.value = value
-    this.id = id
-    this.isQbpItem = true
-}
+function parseArgs (...args) {
+    // Figuring out which arguments are which.
+    var items = args.find((arg) => Array.isArray(arg))
+    var each = args.find((arg) => typeof arg === 'function')
+    var opts = args.find((arg) => arg !== items && arg !== each)
 
-function QbpProgress ({ percent, state, children, dateTime, complete, total, threads, queued, itemsPerSecond, secondsRemaining, batchSize, queue }) {
-    this.percent = percent
-    this.children = children
-    this.state = state
-    this.complete = complete
-    this.total = total
-    this.threads = threads
-    this.queued = queued
-    this.itemsPerSecond = itemsPerSecond
-    this.batch = batchSize
-    this.queue = queue
-    this.secondsRemaining = secondsRemaining
-    this.dateTime = dateTime
+    if (!opts) opts = {}
 
-    if (queue.name) {
-        this.name = queue.name
-    }
-}
-
-QbpProgress.Default = function (queue) {
-    return new QbpProgress({
-        percent: 0,
-        state: null,
-        children: [],
-        dateTime: new Date(),
-        complete: 0,
-        total: 0,
-        threads: 0,
-        queued: 0,
-        itemsPerSecond: 0,
-        seconds: -1,
-        batchSize: 0,
-        queue
-    })
+    return { items, each, opts }
 }
 
 function noop () {};

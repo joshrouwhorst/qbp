@@ -13,19 +13,19 @@ describe('Function Types', function () {
         var recievedItem = false;
         var recievedQueue = false;
 
-        var each = async function asyncTest (item, queue) {
+        var each = async function asyncTest (item, { queue }) {
             await waiter(item);
             called = true;
             if (item) recievedItem = true;
             if (queue) recievedQueue = true;
         };
 
-        var queue = await qbp(testData, (item, queue) => each(item, queue));
+        var { errors } = await qbp(testData, (...args) => each(...args));
 
         assert.ok(called);
         assert.ok(recievedItem);
         assert.ok(recievedQueue);
-        assert.equal(queue.errors.length, 0);
+        assert.equal(errors.length, 0);
     });
     
     it('should process PROMISE functions.', async function () {
@@ -34,7 +34,7 @@ describe('Function Types', function () {
         var recievedItem = false;
         var recievedQueue = false;
 
-        var each = function promiseTest (item, queue) {
+        var each = function promiseTest (item, { queue }) {
             return new Promise(async (resolve, reject) => {
                 try {
                     await waiter(item);
@@ -48,12 +48,12 @@ describe('Function Types', function () {
             });
         };
 
-        var queue = await qbp(testData, (item, queue) => each(item, queue));
+        var { errors } = await qbp(testData, (...args) => each(...args));
 
         assert.ok(called);
         assert.ok(recievedItem);
         assert.ok(recievedQueue);
-        assert.equal(queue.errors.length, 0);
+        assert.equal(errors.length, 0);
     });
 
     
@@ -63,30 +63,29 @@ describe('Function Types', function () {
         var recievedItem = false;
         var recievedQueue = false;
 
-        var each = function regularTest (item, queue) {
+        var each = function regularTest (item, { queue }) {
             called = true;
             if (item) recievedItem = true;
             if (queue) recievedQueue = true;
         };
 
-        var queue = await qbp(testData, (item, queue) => each(item, queue));
+        var { errors } = await qbp(testData, (...args) => each(...args));
 
         assert.ok(called);
         assert.ok(recievedItem);
         assert.ok(recievedQueue);
-        assert.equal(queue.errors.length, 0);
+        assert.equal(errors.length, 0);
     });
 });
 
 describe('Adding Items', function () {
     this.timeout(MAX_WAIT + 1000);
 
-    
     it('should take new items during processing', async function () {
         var items = getTestData(5, 10, 10);
         var readded = false;
 
-        var each = async function (item, queue) {
+        var each = async function (item, { queue }) {
             await waiter(item);
             if (queue.counts.queued === 3 && !readded) {
                 readded = true;
@@ -95,10 +94,10 @@ describe('Adding Items', function () {
             }
         };
 
-        var queue = await qbp(items, (...args) => each(...args), { threads: 1 });
+        var { completed, errors } = await qbp(items, (...args) => each(...args), { threads: 1 });
         
-        assert.equal(queue.complete.length, 6);
-        assert.equal(queue.errors.length, 0);
+        assert.equal(completed.length, items.length);
+        assert.equal(errors.length, 0);
     });
 
     it('should take new items and restart process after being empty', function () {
@@ -109,7 +108,7 @@ describe('Adding Items', function () {
                 var gotQueue = false;
                 var ranAgain = false;
 
-                var each = async function (item, queue) {
+                var each = async function (item) {
                     await waiter(item);
                     if (emptied) ranAgain = true;
                 };
@@ -120,19 +119,17 @@ describe('Adding Items', function () {
                     if (emptied) {
                         assert.ok(gotQueue);
                         assert.ok(ranAgain);
-                        assert.equal(queue.complete.length, 10);
-                        assert.equal(queue.errors.length, 0);
                         resolve();
                     }
 
                     if (!emptied) emptied = true;
                 };
 
-                var queue = await qbp(items, (...args) => each(...args), { 
+                var { queue, completed } = await qbp(items, (...args) => each(...args), { 
                                 threads: 1, 
                                 empty: (...args) => empty(...args) });
 
-                assert.equal(queue.complete.length, 5);
+                assert.equal(completed.length, 5);
                 assert.ok(emptied);
 
                 var newItems = getTestData(5, 10, 10);
@@ -144,7 +141,7 @@ describe('Adding Items', function () {
         });
     });
 
-    it('should let you await an item with addAwait', async function () {
+    it('should let you await an item with add()', async function () {
         var testData = getTestData(100, 10, 100);
 
         var eachRan = false;
@@ -156,13 +153,13 @@ describe('Adding Items', function () {
             await waiter(item);
         }
 
-        var queue = await qbp(testData, (...args) => each(...args));
+        var { queue } = await qbp(testData, (...args) => each(...args));
 
         var item = getTestData(1, 500, 500)[0];
         item.test = true;
 
         assert.ok(!itemFound);
-        await queue.addAwait(item);
+        await queue.add(item);
         assert.ok(itemFound);
     });
 });
@@ -181,7 +178,7 @@ describe('Pause and Resume', function () {
 
                 var threadsFinished = 0;
 
-                var each = async (item, queue) => {
+                var each = async (item, {queue}) => {
                     
                     if (queue.counts.complete === STOPPING_POINT && !hasPaused) {
                         hasPaused = true;
@@ -205,7 +202,7 @@ describe('Pause and Resume', function () {
                     resolve();
                 };
 
-                var queue = await qbp(items, (...args) => each(...args), { threads: THREADS });
+                await qbp(items, (...args) => each(...args), { threads: THREADS });
 
                 assert.fail('Should not finish await when paused.');
             } catch (err) {
@@ -223,7 +220,7 @@ describe('Pause and Resume', function () {
 
         var threadsFinished = 0;
 
-        var each = async (item, queue) => {
+        var each = async (item, {queue}) => {
             
             if (queue.counts.complete === STOPPING_POINT && !hasPaused) {
                 hasPaused = true;
@@ -246,13 +243,13 @@ describe('Pause and Resume', function () {
             queue.resume();
         };
 
-        var queue = await qbp(items, (...args) => each(...args), { threads: THREADS });
+        var { queue, completed, errors } = await qbp(items, (...args) => each(...args), { threads: THREADS });
 
         assert.ok(hasPaused);
-        assert.equal(queue.complete.length, items.length);
+        assert.equal(completed.length, items.length);
         assert.equal(threadsFinished, items.length);
         assert.equal(queue.status, 'empty');
-        assert.equal(queue.errors.length, 0);
+        assert.equal(errors.length, 0);
     });
 });
 
@@ -263,11 +260,11 @@ describe('Batching', function () {
     it('should break items into batches', async function () {
         var items = getTestData(MAX_ITEMS);
         const BATCH_SIZE = 5;
-        const TARGET_COMPLETE_LENGTH = Math.ceil(items.length / BATCH_SIZE);
+        const TARGET_COMPLETE_LENGTH = items.length;
         var equalItems = 0;
         var lessItems = 0;
 
-        var each = async (items, queue) => {
+        var each = async (items) => {
             if (!Array.isArray(items)) {
                 assert.fail('items should be an array.');
             }
@@ -285,11 +282,11 @@ describe('Batching', function () {
             await waiter(items[0]);
         };
 
-        var queue = await qbp(items, (...args) => each(...args), { threads: 1, batch: BATCH_SIZE });
-        assert.equal(queue.complete.length, TARGET_COMPLETE_LENGTH);
+        var { completed, errors } = await qbp(items, (...args) => each(...args), { threads: 1, batch: BATCH_SIZE });
+        assert.equal(completed.length, TARGET_COMPLETE_LENGTH);
         assert.ok(equalItems >= 1);
         assert.ok(lessItems <= 1);
-        assert.equal(queue.errors.length, 0);
+        assert.equal(errors.length, 0);
     });
 });
 
@@ -312,7 +309,7 @@ describe('Threads', function () {
         var decreaseAmountReached = false;
         var startAmountReached = false;
 
-        var each = async (item, queue) => {
+        var each = async (item, { queue }) => {
             if (threadsIncreased && !threadsDecreased) {
                 assert.ok(queue.counts.threads <= INCREASE_AMOUNT && queue.counts.threads >= START_AMOUNT);
             }
@@ -345,11 +342,11 @@ describe('Threads', function () {
             await waiter(item);
         };
 
-        var queue = await qbp(items, (...args) => each(...args), { threads: START_AMOUNT });
+        var { queue, errors } = await qbp(items, (...args) => each(...args), { threads: START_AMOUNT });
         assert.ok(threadsIncreased);
         assert.ok(threadsDecreased);
         assert.equal(queue.counts.threads, 0);
-        assert.equal(queue.errors.length, 0);
+        assert.equal(errors.length, 0);
         assert.ok(increaseAmountReached);
         assert.ok(decreaseAmountReached);
     });
@@ -362,7 +359,7 @@ describe('Parameters', function () {
     it('should let you define the queue and add each function and items later, and allow you to await qbp.each()', async function () {
         var testData = getTestData(MAX_ITEMS);
         
-        var queue = qbp();
+        var { queue } = qbp();
         
         assert.ok(queue);
         assert.ok(!(queue instanceof Promise));
@@ -378,16 +375,17 @@ describe('Parameters', function () {
         assert.equal(queue.status, 'waiting');
 
         var ran = false;
-        var each = async (item, queue) => {
+        var each = async (item) => {
             ran = true;
             await waiter(item);
         };
 
         assert.ok(!ran);
-        await queue.each((...args) => each(...args));
+        var { errors, completed } = await queue.each((...args) => each(...args));
         assert.ok(ran);
         assert.equal(queue.counts.queued, 0);
-        assert.equal(queue.errors.length, 0);
+        assert.equal(errors.length, 0);
+        assert.equal(completed.length, testData.length);
         assert.equal(queue.status, 'empty');
     });
 
@@ -395,7 +393,7 @@ describe('Parameters', function () {
         var items = getTestData(MAX_ITEMS);
 
         var ran = false;
-        var each = async (item, queue) => {
+        var each = async (item, { queue }) => {
             ran = true;
             assert.ok(item);
             assert.equal(queue.counts.threads, 1);
@@ -403,12 +401,12 @@ describe('Parameters', function () {
         };
         
         assert.ok(!ran);
-        var queue = await qbp({ threads: 1 }, items, (...args) => each(...args));
+        var { queue, errors, completed } = await qbp({ threads: 1 }, items, (...args) => each(...args));
         assert.ok(ran);
         assert.equal(queue.counts.threads, 0);
-        assert.equal(queue.errors.length, 0);
-        assert.equal(queue.complete.length, items.length);
-        assert.equal(queue.complete.length, queue.counts.complete);
+        assert.equal(errors.length, 0);
+        assert.equal(completed.length, items.length);
+        assert.equal(completed.length, queue.counts.complete);
     });
 });
 
@@ -417,48 +415,41 @@ describe('Progress', function () {
     this.timeout(MAX_ITEMS * 500 + 1000);
 
     it('should send progress updates', async function () {
-        var items = getTestData(MAX_ITEMS, 10, 50);
+        var items = getTestData(MAX_ITEMS, 100, 200);
         const NAME = 'Test';
 
         var eachRan = false;
-        var each = async (item, queue) => {
+        var each = async (item) => {
             eachRan = true;
             await waiter(item);
         };
 
         var progressRan = false;
-        var progress = (prog) => {
-            if (prog.itemsPerSecond === 0) {
-                assert.equal(prog.secondsRemaining, -1);
+        var progress = ({ percent, statuses, complete, threads, total, queued, itemsPerSecond, secondsRemaining, batch, queue, name }) => {
+            if (itemsPerSecond === 0) {
+                assert.equal(secondsRemaining, -1);
             }
             else {
-                assert.ok(prog.secondsRemaining >= 0);
+                assert.ok(secondsRemaining >= 0);
             }
 
             progressRan = true;
-            assert.ok(prog);
-            assert.ok(prog.percent >= 0 && prog.percent <= 1);
-            assert.ok(prog.complete >= 0);
-            assert.equal(prog.total, items.length);
-            assert.ok(prog.queued <= items.length);
-            assert.ok(prog.itemsPerSecond >= 0);
-            assert.equal(prog.batch, 1);
-            assert.ok(prog.queue);
-            assert.equal(prog.name, NAME);
-            assert.equal(prog.queue.name, NAME);
-
-            if (prog.queue.status === 'empty') {
-                assert.equal(prog.threads, 0);
-            }
-            else {
-                assert.equal(prog.threads, 1);
-            }
+            assert.ok(percent >= 0 && percent <= 1);
+            assert.ok(complete >= 0);
+            assert.ok(statuses instanceof Array);
+            assert.equal(total, items.length);
+            assert.ok(queued <= items.length);
+            assert.ok(itemsPerSecond >= 0);
+            assert.equal(batch, 1);
+            assert.ok(queue);
+            assert.equal(name, NAME);
+            assert.equal(queue.name, NAME);
         }
         
         assert.ok(!eachRan);
         assert.ok(!progressRan);
         
-        var queue = await qbp(items, (...args) => each(...args), {
+        var { queue, errors } = await qbp(items, (...args) => each(...args), {
             threads: 1,
             name: NAME,
             progress: (...args) => progress(...args),
@@ -468,133 +459,8 @@ describe('Progress', function () {
         assert.ok(eachRan);
         assert.ok(progressRan);
         assert.equal(queue.name, NAME);
-        assert.equal(queue.errors.length, 0);
+        assert.equal(errors.length, 0);
     });
-
-    it('should handle child queue progress updates, "on change" progress internvals, and states', async function () {
-        const MAX_CHILD_ITEMS = 10;
-        var items = getTestData(MAX_ITEMS, 10, 50);
-        var subItems = getTestData(MAX_CHILD_ITEMS, 10, 50)
-
-        var eachCount = 0;
-        var subCount = 0;
-        var stateUpdate = false;
-        var parentStateUpdate = false;
-        var childRunning = false;
-
-        var each = async (item, queue) => {
-            parentStateUpdate = true;
-            queue.progressState(`Item ${eachCount}`);
-            
-            await qbp(subItems, async (subItem, subQueue) => {
-                childRunning = true;
-                stateUpdate = true;
-                subQueue.progressState(`Item ${subCount} / ${eachCount}`)
-                await waiter(subItem);
-                subCount++;
-            }, {
-                threads: 1,
-                parent: queue,
-                name: `Child ${eachCount}`
-            })
-            
-            childRunning = false;
-            eachCount++;
-            subCount = 0;
-        };
-
-        var progressRanCount = 0;
-
-        var progress = (prog) => {
-            progressRanCount++;
-            assert.ok(prog);
-            assert.ok(prog.percent >= 0 && prog.percent <= 1);
-            assert.ok(prog.children instanceof Array);
-            assert.equal(prog.percent, eachCount / items.length)
-
-            if (childRunning) {
-                assert.equal(prog.children.length, 1)
-                assert.equal(prog.children[0].percent, subCount / subItems.length);
-            }
-
-            if (parentStateUpdate) {
-                assert.equal(prog.state, `Item ${eachCount}`);
-                parentStateUpdate = false;
-            }
-
-            if (stateUpdate) {
-                assert.equal(prog.children[0].state, `Item ${subCount} / ${eachCount}`);
-                stateUpdate = false;
-            }
-        }
-        
-        assert.equal(progressRanCount, 0);
-        assert.equal(eachCount, 0);
-        
-        var queue = await qbp(items, (...args) => each(...args), {
-            threads: 1,
-            progress: (...args) => progress(...args),
-            name: 'Parent'
-        });
-
-        assert.equal(eachCount, MAX_ITEMS);
-        assert.ok(progressRanCount >= MAX_ITEMS * MAX_CHILD_ITEMS);
-        assert.equal(queue.errors.length, 0);
-    })
-
-    it('should account for a defined number of children', async function () {
-        const MAX_CHILD_ITEMS = 20;
-        const THREADS = 2;
-        var items = getTestData(MAX_ITEMS, 10, 50);
-        var subItems1 = getTestData(MAX_CHILD_ITEMS, 10, 10)
-        var subItems2 = getTestData(MAX_CHILD_ITEMS - 5, 10, 10)
-
-        var eachCount = 0;
-        var subCount = 0;
-
-        var each = async (item, queue) => {
-            eachCount++;
-            
-            await qbp(subItems1, async (subItem, subQueue) => {
-                await waiter(subItem);
-                subCount++;
-            }, {
-                threads: 1,
-                parent: queue,
-                name: `Child 1-${eachCount}`
-            })
-
-            await qbp(subItems2, async (subItem, subQueue) => {
-                await waiter(subItem);
-                subCount++;
-            }, {
-                threads: 1,
-                parent: queue,
-                name: `Child 2-${eachCount}`
-            })
-        };
-
-        var progressRanCount = 0;
-
-        var progress = (prog) => {
-            progressRanCount++;
-            assert.ok(prog.children.length >= 0 && prog.children.length <= THREADS * 2)
-        }
-        
-        assert.equal(progressRanCount, 0);
-        assert.equal(eachCount, 0);
-        
-        var queue = await qbp(items, (...args) => each(...args), {
-            threads: THREADS,
-            progress: (...args) => progress(...args),
-            name: 'Parent'
-        });
-
-        assert.equal(eachCount, MAX_ITEMS);
-        assert.equal(subCount, items.length * (subItems1.length + subItems2.length))
-        assert.ok(progressRanCount >= MAX_ITEMS * MAX_CHILD_ITEMS);
-        assert.equal(queue.errors.length, 0);
-    })
 });
 
 describe('Mix', function () {
@@ -608,7 +474,7 @@ describe('Mix', function () {
         const EXPECTED_TOTAL = 3;
 
         var eachRan = false;
-        var each = async (item1, item2, queue) => {
+        var each = async (item1, item2, { queue }) => {
             eachRan = true;
             assert.ok(item1);
             assert.ok(item2);
@@ -617,11 +483,11 @@ describe('Mix', function () {
         };
 
         assert.ok(!eachRan);
-        var queue = await qbp([items1, items2, items3], (...args) => each(...args), { spreadItem: true });
+        var { queue, completed, errors } = await qbp([items1, items2, items3], (...args) => each(...args), { spreadItem: true });
         assert.ok(eachRan);
         assert.equal(queue.counts.total, EXPECTED_TOTAL);
-        assert.equal(queue.complete.length, EXPECTED_TOTAL);
-        assert.equal(queue.errors.length, 0);
+        assert.equal(completed.length, EXPECTED_TOTAL);
+        assert.equal(errors.length, 0);
     });
 
     it('should handle multiple arrays', async function () {
@@ -631,7 +497,7 @@ describe('Mix', function () {
         const EXPECTED_TOTAL = items1.length * items2.length * items3.length;
 
         var eachRan = false;
-        var each = async (item1, item2, item3, queue) => {
+        var each = async (item1, item2, item3, { queue }) => {
             eachRan = true;
             assert.ok(item1);
             assert.ok(item2);
@@ -641,11 +507,11 @@ describe('Mix', function () {
         };
 
         assert.ok(!eachRan);
-        var queue = await qbp.mix([items1, items2, items3], (...args) => each(...args));
+        var { queue, completed, errors } = await qbp.mix([items1, items2, items3], (...args) => each(...args));
         assert.ok(eachRan);
         assert.equal(queue.counts.total, EXPECTED_TOTAL);
-        assert.equal(queue.complete.length, EXPECTED_TOTAL);
-        assert.equal(queue.errors.length, 0);
+        assert.equal(completed.length, EXPECTED_TOTAL);
+        assert.equal(errors.length, 0);
     });
 });
 
@@ -661,7 +527,7 @@ describe('Error Handling', function () {
         };
 
         var errorRan = false;
-        var error = function (err, item, queue) {
+        var error = function (err, item, {queue}) {
             errorRan = true;
             assert.ok(err);
             assert.ok(item);
@@ -671,14 +537,14 @@ describe('Error Handling', function () {
         assert.ok(!eachRan);
         assert.ok(!errorRan);
 
-        var queue = await qbp(items, (...args) => each(...args), {
+        var { completed, errors } = await qbp(items, (...args) => each(...args), {
             error: (...args) => error(...args)
         });
 
         assert.ok(eachRan);
         assert.ok(errorRan);
-        assert.equal(queue.complete.length, 0);
-        assert.equal(queue.errors.length, 1);
+        assert.equal(completed.length, 0);
+        assert.equal(errors.length, 1);
     });
 });
 
@@ -696,7 +562,7 @@ describe('Rate Limiting', function () {
 
                 var itemCount = 0;
 
-                const each = async (item, queue) => {
+                const each = async (item) => {
                     itemCount++
                     await waiter(item);
                 };
@@ -708,14 +574,8 @@ describe('Rate Limiting', function () {
                 }
 
                 var startTime = new Date();
-                var timeOutRan = false;
 
-                setTimeout(() => {
-                    timeOutRan = true;
-                    assert.ok(itemCount <= RATE_MAX);
-                }, RATE_TIME * 1000)
-
-                var queue = await qbp(items, (...args) => each(...args), {
+                var { errors } = await qbp(items, (...args) => each(...args), {
                     rateLimit: RATE_MAX,
                     rateLimitSeconds: RATE_TIME,
                     rateUpdate: (...args) => rateUpdate(...args),
@@ -725,9 +585,8 @@ describe('Rate Limiting', function () {
                 var endTime = new Date();
 
                 var timeSpan = endTime.getTime() - startTime.getTime();
-                assert.equal(queue.errors.length, 0);
+                assert.equal(errors.length, 0);
                 assert.ok(timeSpan + ACCEPTABLE_THRESHOLD >= (GOAL_TIME * 1000));
-                assert.ok(timeOutRan);
                 resolve();
             } catch (err) {
                 reject(err);
@@ -746,14 +605,14 @@ describe('Rate Limiting', function () {
 
                 var itemCount = 0;
 
-                const each = async (item, queue) => {
+                const each = async (item) => {
                     itemCount++
                     await waiter(item);
                 };
 
                 var threadSum = 0;
                 var updateCount = 0;
-                const rateUpdate = ({ currentThreads, threadDiff }) => {
+                const rateUpdate = ({ currentThreads }) => {
                     updateCount++
                     threadSum += currentThreads
                 }
@@ -770,7 +629,7 @@ describe('Rate Limiting', function () {
                     assert.ok(itemCount <= RATE_MAX);
                 }, RATE_TIME * 1000)
 
-                var queue = await qbp(items, (...args) => each(...args), {
+                var {errors} = await qbp(items, (...args) => each(...args), {
                     rateLimit: RATE_MAX,
                     rateLimitSeconds: RATE_TIME,
                     rateLimitFidelity: 4,
@@ -782,7 +641,7 @@ describe('Rate Limiting', function () {
 
                 var timeSpan = endTime.getTime() - startTime.getTime();
                 assert.equal(Math.round(threadSum / updateCount), 2); // Make sure if averages to 2 threads.
-                assert.equal(queue.errors.length, 0);
+                assert.equal(errors.length, 0);
                 assert.ok(timeSpan >= (GOAL_TIME * 1000));
                 assert.ok(timeOutRan);
                 resolve();
@@ -803,13 +662,13 @@ describe('Rate Limiting', function () {
 
                 var itemCount = 0;
 
-                const each = async (item, queue) => {
+                const each = async (item) => {
                     itemCount++
                     await waiter(item);
                 };
                 
                 var rateUpdateRan = false;
-                const rateUpdate = ({ projectedCount, currentThreads, neededChange, threadDiff }) => {
+                const rateUpdate = () => {
                     rateUpdateRan = true;
                 }
 
@@ -819,7 +678,7 @@ describe('Rate Limiting', function () {
 
                 var startTime = new Date();
 
-                var queue = await qbp(items, (...args) => each(...args), {
+                var {errors} = await qbp(items, (...args) => each(...args), {
                     rateLimit: RATE_MAX,
                     rateLimitSeconds: RATE_TIME,
                     rateUpdate: (...args) => rateUpdate(...args),
@@ -829,7 +688,7 @@ describe('Rate Limiting', function () {
                 var endTime = new Date();
 
                 var timeSpan = endTime.getTime() - startTime.getTime();
-                assert.equal(queue.errors.length, 0);
+                assert.equal(errors.length, 0);
                 assert.ok(rateUpdateRan);
                 assert.ok(timeSpan >= (GOAL_TIME * 1000));
                 resolve();
@@ -850,7 +709,7 @@ describe('Rate Limiting', function () {
 
                 var itemCount = 0;
 
-                const each = async (item, queue) => {
+                const each = async (item) => {
                     itemCount++
                     await waiter(item);
                 };
@@ -869,7 +728,7 @@ describe('Rate Limiting', function () {
                 var startTime = new Date();
                 var timeOutRan = false;
 
-                var queue = await qbp(items, (...args) => each(...args), {
+                var {errors} = await qbp(items, (...args) => each(...args), {
                     rateLimit: RATE_MAX,
                     rateLimitSeconds: RATE_TIME,
                     rateUpdate: (...args) => rateUpdate(...args),
@@ -879,7 +738,7 @@ describe('Rate Limiting', function () {
                 var endTime = new Date();
 
                 var timeSpan = endTime.getTime() - startTime.getTime();
-                assert.equal(queue.errors.length, 0);
+                assert.equal(errors.length, 0);
                 assert.ok(timeSpan < (GOAL_TIME * 1000));
                 assert.ok(rateUpdateRan);
                 resolve();
@@ -889,6 +748,47 @@ describe('Rate Limiting', function () {
         });
     });
 });
+
+describe('Statuses', function () {
+    it('should provide item statuses in the progress function', async function () {
+        var items = getTestData(10, 1, 10)
+        const TEST_DATA_COUNT = items.length
+        var allStatuses = []
+
+        var each = async (item, { setStatus }) => {
+            setStatus({ id: item.id, step: 'one' })
+            await waiter(item)
+            setStatus({ id: item.id, step: 'two' })
+        }
+
+        var prog = ({ statuses }) => {
+            allStatuses = allStatuses.concat(statuses)
+        }
+
+        var { completed } = await qbp(items, (...args) => each(...args), {
+            progress: (...args) => prog(...args),
+            threads: 2
+        })
+
+        var hasQueueStage = allStatuses.some(s => s.stage === 'queued')
+        var hasProcessingStage = allStatuses.some(s => s.stage === 'processing')
+        var hasCompleteStage = allStatuses.some(s => s.stage === 'complete')
+        assert.ok(hasQueueStage)
+        assert.ok(hasProcessingStage)
+        assert.ok(hasCompleteStage)
+
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i]
+
+            var statuses = allStatuses.filter(s => s.item === item)
+            var hasStep1 = statuses.some(s => s.status && s.status.step === 'one')
+            var hasStep2 = statuses.some(s => s.status && s.status.step === 'two')
+
+            assert.ok(hasStep1)
+            assert.ok(hasStep2)
+        }
+    })
+})
 
 // Utility functions
 
