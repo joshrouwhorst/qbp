@@ -444,13 +444,6 @@ describe('Progress', function () {
             assert.ok(queue);
             assert.equal(name, NAME);
             assert.equal(queue.name, NAME);
-
-            if (queue.status === 'empty') {
-                assert.equal(threads, 0);
-            }
-            else {
-                assert.equal(threads, 1);
-            }
         }
         
         assert.ok(!eachRan);
