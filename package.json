@@ -5,7 +5,7 @@
   "main": "qbp.js",
   "scripts": {
     "lint": "eslint qbp.js --fix",
-    "test": "mocha"
+    "test": "npm run lint && mocha --exit"
   },
   "repository": {
     "type": "git",
