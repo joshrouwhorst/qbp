@@ -17,7 +17,7 @@
     <div class="wrapper">
       <header>
         <div class="row">
-          <div class="col-12 col-md-9">
+          <div class="col-12 col-md-6">
             {% if site.logo %}
               <img src="{{site.logo | relative_url}}" alt="Logo" />
             {% endif %}
@@ -25,7 +25,7 @@
             <p>{{ site.description | default: site.github.project_tagline }}</p>
           </div>
 
-          <div class="col-12 col-md-3">
+          <div class="col-12 col-md-6">
             {% if site.github.is_project_page %}
             <p class="view"><a href="{{ site.github.repository_url }}">View the Project on GitHub <small>{{ site.github.repository_nwo }}</small></a></p>
             {% endif %}

@@ -4,6 +4,12 @@
 @import "{{ site.theme }}";
 
 .qbp {
+    a {
+        &:hover, &:focus {
+            font-weight: normal;
+        }
+    }
+
     header {
         float: none;
         position: relative;
@@ -13,5 +19,12 @@
     section {
         float: none;
         width: 100%;
+    }
+
+    footer {
+        float: none;
+        position: relative;
+        width: 100%;
+        bottom: initial;
     }
 }
