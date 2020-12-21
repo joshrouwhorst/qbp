@@ -43,12 +43,8 @@ await qbp(items, (item) => each(item));
 
 This is the core of qbp's functionality. It will loop through `items` and will concurrently pass every item to your `each` function and await its completion.
 
-<iframe src="https://codesandbox.io/embed/qbp-basic-usage-ykzym?fontsize=14&hidenavigation=1&theme=dark"
-     style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
-     title="qbp - Basic Usage"
-     allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
-     sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
-     ></iframe>
+> **Example:** 
+> [Basic Usage Example](https://joshrouwhorst.github.io/qbp/examples/basic-usage.html)
 
 qbp returns an object with a few attributes:
 
@@ -392,26 +388,8 @@ async function addStudent(teacher, classRoom, student, { queue }) {
 }
 ```
 
-So if you had an arrays such as:
-
-```js
-var teachers = ['Mrs. Robinson', 'Mr. Knox', 'Mr. Anderson'];
-var classRooms = [102, 203];
-var students = ['Billy', 'Jane'];
-```
-
-The `each` function would get called with every combination of those.
-
-```js
-async function each(teacher, classRoom, student, { queue }) {
-    // 'Mrs. Robinson', 102, 'Billy'
-    // 'Mrs. Robinson', 102, 'Jane'
-    // 'Mrs. Robinson', 203, 'Billy'
-    // 'Mrs. Robinson', 203, 'Jane'
-    // 'Mr. Knox', 102, 'Billy'
-    // etc...
-}
-```
+> **Example:** 
+> [Mix Example](https://joshrouwhorst.github.io/qbp/examples/mix.html)
 
 > One thing to keep in mind. You only have one `queue` object using this. The `queue.add()` function won't perform the mixing functionality that you get when you pass it in to the `mix()` function. But if you don't need to add any more items while processing, then this works perfect.
 
