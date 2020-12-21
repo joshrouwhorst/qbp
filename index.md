@@ -43,7 +43,18 @@ await qbp(items, (item) => each(item));
 
 This is the core of qbp's functionality. It will loop through `items` and will concurrently pass every item to your `each` function and await its completion.
 
-qbp returns the `queue` object (which is explained below), `completed` which is an array of successfully completed items, and `errors` which is an array of objects with an `error` attribute and an `item` attribute. These are items that threw an error in the `each` function. The `error` attribute is the error that was thrown.
+<iframe src="https://codesandbox.io/embed/qbp-basic-usage-ykzym?fontsize=14&hidenavigation=1&theme=dark"
+     style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
+     title="qbp - Basic Usage"
+     allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
+     sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+     ></iframe>
+
+qbp returns an object with a few attributes:
+   - `queue` object (which is explained below)
+   - `completed` which is an array of successfully completed items
+   - `errors` which is an array of objects with an `error` attribute and an `item` attribute. 
+     - These are items that threw an error in the `each` function. The `error` attribute is the error that was thrown.
 
 ```js
 var { queue, completed, errors } = await qbp(items, (item) => each(item));
@@ -71,7 +82,7 @@ The queue object is returned by qbp as well as passed to all of the functions th
 
 ### queue.name
 
-You can set a `name` option when calling `qbp`. If you set the `name` option, this will have that value. This can be useful when you have multiple queues you've created and maybe some of them are using the same `progress` function, for example.
+You can set a `name` option when calling `qbp`. If you set the `name` option, this attribute will have that value. This can be useful when you have multiple queues you've created and maybe some of them are using the same `progress` function, for example.
 
 ### queue.empty()
 
@@ -273,7 +284,7 @@ async function each(batch) {
 This is a meant to be a system for easily creating a queued process that runs in the background but will provide updates as it progresses. Think of a resource intensive process, like crawling a website. You want to limit how many of these scans can happen simultaneously, and maybe you want to display a queue of the user's requests that updates as their requests progress.
 
 ```js
-var { queue } = qbp.((...args) => handleItem(...args), {
+var { queue } = qbp((...args) => handleItem(...args), {
     threads: 5,
     progress: (...args) => progressUpdates(...args)
 })
