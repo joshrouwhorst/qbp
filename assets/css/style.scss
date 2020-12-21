@@ -1,0 +1,14 @@
+@import "{{ site.theme }}";
+
+.qbp {
+    header {
+        float: none;
+        position: relative;
+        width: 100%;
+    }
+
+    section {
+        float: none;
+        width: 100%;
+    }
+}
