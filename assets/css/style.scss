@@ -6,7 +6,8 @@
 .qbp {
     a {
         &:hover, &:focus {
-            font-weight: normal;
+            font-weight: inherit;
+            text-decoration: none;
         }
     }
 
