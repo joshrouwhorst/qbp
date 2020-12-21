@@ -43,7 +43,19 @@ await qbp(items, (item) => each(item));
 
 This is the core of qbp's functionality. It will loop through `items` and will concurrently pass every item to your `each` function and await its completion.
 
-qbp returns the `queue` object (which is explained below), `completed` which is an array of successfully completed items, and `errors` which is an array of objects with an `error` attribute and an `item` attribute. These are items that threw an error in the `each` function. The `error` attribute is the error that was thrown.
+<iframe src="https://codesandbox.io/embed/qbp-basic-usage-ykzym?fontsize=14&hidenavigation=1&theme=dark"
+     style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
+     title="qbp - Basic Usage"
+     allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
+     sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+     ></iframe>
+
+qbp returns an object with a few attributes:
+
+- `queue` object (which is explained below)
+- `completed` which is an array of successfully completed items
+- `errors` which is an array of objects with an `error` attribute and an `item` attribute. 
+  - These are items that threw an error in the `each` function. The `error` attribute is the error that was thrown.
 
 ```js
 var { queue, completed, errors } = await qbp(items, (item) => each(item));
@@ -71,7 +83,7 @@ The queue object is returned by qbp as well as passed to all of the functions th
 
 ### queue.name
 
-You can set a `name` option when calling `qbp`. If you set the `name` option, this will have that value. This can be useful when you have multiple queues you've created and maybe some of them are using the same `progress` function, for example.
+You can set a `name` option when calling `qbp`. If you set the `name` option, this attribute will have that value. This can be useful when you have multiple queues you've created and maybe some of them are using the same `progress` function, for example.
 
 ### queue.empty()
 
@@ -203,7 +215,13 @@ By default, qbp will process all of your items concurrently. But if that's too m
 
 If you need to limit processing your items by a number of items within a timeframe then this should help. Rate limiting adjusts the number of threads running simultaneously and makes sure each item takes a minimum amount of time to process in order to meet limit expectations.
 
-In the options object you pass to `qbp` you can set `rateLimit` which is the maximum number of items allowed to process within the a time frame, `rateLimitSeconds` which is that timeframe in seconds, `rateUpdate` which is a function that can get called with updates every time the rate limit check runs, and `rateFidelity` which is how often you want the rate limiting check to run within `rateLimitSeconds`. So a fidelity of 16 (which is the default value) in with a `rateLimitSeconds` of 3600 would check and adjust the rate limiting every 225 seconds, running 16 times in 3600 seconds.
+In the options object you pass to `qbp` you can set:
+
+- `rateLimit` which is the maximum number of items allowed to process within the a time frame.
+- `rateLimitSeconds` which is that timeframe in seconds.
+- `rateUpdate` which is a function that can get called with updates every time the rate limit check runs.
+- `rateFidelity` which is how often you want the rate limiting check to run within `rateLimitSeconds`.
+  - So a `rateFidelity` of 16 (which is the default value) with `rateLimitSeconds` set to 3600 would check and adjust the rate limiting every 225 seconds, running 16 times in 3600 seconds.
 
 At any time **you can programmatically add rate limiting** to a queue by calling `queue.rateLimit()` and passing in the `rateLimit`, `rateLimitSeconds`, and `rateFidelity` values.
 
@@ -270,10 +288,10 @@ async function each(batch) {
 
 ## Item Statuses
 
-This is a meant to be a system for easily creating a queued process that runs in the background but will provide updates as it progresses. Think of a resource intensive process, like crawling a website. You want to limit how many of these scans can happen simultaneously, and maybe you want to display a queue of the user's requests that updates as their requests progress.
+This is meant to be a system for easily creating a queued process that runs in the background but will provide updates as it progresses. Think of a resource intensive process, like crawling a website. You want to limit how many of these scans can happen simultaneously, and maybe you want to display a queue of the user's requests that updates as their requests progress.
 
 ```js
-var { queue } = qbp.((...args) => handleItem(...args), {
+var { queue } = qbp((...args) => handleItem(...args), {
     threads: 5,
     progress: (...args) => progressUpdates(...args)
 })
@@ -288,39 +306,57 @@ async function handleItem (item, { setStatus }) {
     setStatus({
         name: item.name,
         process: 'Preparing',
+        percent: 0.33,
         time: new Date()
     })
 
     await _db.insert(item)
 
     if (checkSomething) {
-        await migrateItem(item)
+        await migrateItem(item, setStatus)
     } else {
-        await doSomethingElse(item)
+        await doSomethingElse(item, setStatus)
     }
 }
 
-async function migrateItem (item) {
+async function migrateItem (item, setStatus) {
     // You can change that status throughout the process
     setStatus({
         name: item.name,
         process: 'Migrating',
+        percent: 0.66,
         time: new Date()
     })
 
     await _db.move(item)
+
+    setStatus({
+        name: item.name,
+        process: 'Complete',
+        percent: 1,
+        time: new Date()
+    })
 }
 
 // If you haven't defined a progressInterval option, calling setStatus will trigger a progress update.
 function progressUpdate ({ statuses }) {
     console.log('Current Item Statuses:')
 
-    for (var i = 0; i < statuses.length; i++) {
-        var {
+    for (let i = 0; i < statuses.length; i++) {
+        const {
             stage, // stage is set by qbp and will be 'queued', 'processing', 'complete', or 'error'.
             status, // status is the status you set above. 'queued' items will not have a status set yet.
             item // item is the actual item in the queue we're referring to.
         } = statuses[i]
+
+        if (!status) continue
+
+        const {
+            name,
+            process,
+            percent,
+            time
+        } = status
     }
 }
 
