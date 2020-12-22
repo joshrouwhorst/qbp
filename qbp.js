@@ -185,7 +185,7 @@ function qbp (...args) {
     }
 
     function resume (newItem) {
-        var canRun = queueItems.length > 0 && !!progress && !running
+        var canRun = queueItems.length > 0 && !!progress && (!running || opts.threads > threadCount)
         // Make sure we're not currently running and make sure we're not unpausing just because we added a new item.
         // If they paused the queue, they should be able to add new items without restarting it until they manually call resume().
         if (canRun && (!newItem || queue.status !== 'paused')) {
