@@ -392,12 +392,26 @@ async function addStudent(teacher, classRoom, student, { queue }) {
 }
 ```
 
-<iframe src="https://codesandbox.io/embed/charming-snowflake-5evkt?fontsize=14&hidenavigation=1&theme=dark"
-     style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
-     title="qbp - Mix Example"
-     allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
-     sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
-   ></iframe>
+So if you had an arrays such as:
+
+```js
+var teachers = ['Mrs. Robinson', 'Mr. Knox', 'Mr. Anderson'];
+var classRooms = [102, 203];
+var students = ['Billy', 'Jane'];
+```
+
+The `each` function would get called with every combination of those.
+
+```js
+async function each(teacher, classRoom, student, { queue }) {
+    // 'Mrs. Robinson', 102, 'Billy'
+    // 'Mrs. Robinson', 102, 'Jane'
+    // 'Mrs. Robinson', 203, 'Billy'
+    // 'Mrs. Robinson', 203, 'Jane'
+    // 'Mr. Knox', 102, 'Billy'
+    // etc...
+}
+```
 
 > One thing to keep in mind. You only have one `queue` object using this. The `queue.add()` function won't perform the mixing functionality that you get when you pass it in to the `mix()` function. But if you don't need to add any more items while processing, then this works perfect.
 
