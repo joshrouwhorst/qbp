@@ -358,6 +358,9 @@ function progressUpdate ({ statuses }) {
 
 ```
 
+> **Example:**
+> [Status Example](https://joshrouwhorst.github.io/qbp/examples/statuses.html)
+
 ## Mixing
 
 I found myself nesting queues whenever I needed to loop through multiple arrays. So I added a `mix` function to help with this. Here's what I **was** doing.
@@ -388,7 +391,7 @@ async function addStudent(teacher, classRoom, student, { queue }) {
 }
 ```
 
-> **Example:** 
+> **Example:**
 > [Mix Example](https://joshrouwhorst.github.io/qbp/examples/mix.html)
 
 > One thing to keep in mind. You only have one `queue` object using this. The `queue.add()` function won't perform the mixing functionality that you get when you pass it in to the `mix()` function. But if you don't need to add any more items while processing, then this works perfect.
