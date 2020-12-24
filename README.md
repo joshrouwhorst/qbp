@@ -14,6 +14,7 @@ Reach out on [Twitter](https://twitter.com/joshrouwhorst) or [GitHub](https://gi
 - [qbp - queue, batch, process](#qbp---queue-batch-process)
   - [Contents](#contents)
   - [Usage](#usage)
+    - [Basic Usage Example](#basic-usage-example)
   - [Queue Object](#queue-object)
     - [queue.name](#queuename)
     - [queue.empty()](#queueempty)
@@ -30,7 +31,9 @@ Reach out on [Twitter](https://twitter.com/joshrouwhorst) or [GitHub](https://gi
   - [Rate Limiting](#rate-limiting)
   - [Batching](#batching)
   - [Item Statuses](#item-statuses)
+    - [Statuses Example](#statuses-example)
   - [Mixing](#mixing)
+    - [Mix Example](#mix-example)
   - [Error Handling](#error-handling)
   - [Empty Function](#empty-function)
   - [Testing](#testing)
@@ -43,8 +46,11 @@ await qbp(items, (item) => each(item));
 
 This is the core of qbp's functionality. It will loop through `items` and will concurrently pass every item to your `each` function and await its completion.
 
-> **Example:** 
-> [Basic Usage Example](https://joshrouwhorst.github.io/qbp/examples/basic-usage.html)
+### Basic Usage Example
+
+<a href="https://joshrouwhorst.github.io/qbp/examples/basic-usage.html"><img src="https://media.giphy.com/media/GB4mgLDKKCiqMkXW85/giphy.gif" style="width: 100%" />
+Click here for a live example.
+</a>
 
 qbp returns an object with a few attributes:
 
@@ -358,8 +364,12 @@ function progressUpdate ({ statuses }) {
 
 ```
 
-> **Example:**
-> [Status Example](https://joshrouwhorst.github.io/qbp/examples/statuses.html)
+### Statuses Example
+
+<a href="https://joshrouwhorst.github.io/qbp/examples/statuses.html">
+    <img src="https://media.giphy.com/media/DKsUsizLhUeKT2Lo7x/giphy.gif" style="width: 100%">
+    Click for live example.
+</a>
 
 ## Mixing
 
@@ -391,8 +401,12 @@ async function addStudent(teacher, classRoom, student, { queue }) {
 }
 ```
 
-> **Example:**
-> [Mix Example](https://joshrouwhorst.github.io/qbp/examples/mix.html)
+### Mix Example
+
+<a href="https://joshrouwhorst.github.io/qbp/examples/mix.html">
+    <img src="https://media.giphy.com/media/6Ai2y8p3VyffbWaUkh/giphy.gif" style="width: 100%">
+    Click for live example.
+</a>
 
 > One thing to keep in mind. You only have one `queue` object using this. The `queue.add()` function won't perform the mixing functionality that you get when you pass it in to the `mix()` function. But if you don't need to add any more items while processing, then this works perfect.
 
