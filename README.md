@@ -49,6 +49,9 @@ This is the core of qbp's functionality. It will loop through `items` and will c
 ### Basic Usage Example
 
 <a href="https://joshrouwhorst.github.io/qbp/examples/basic-usage.html"><img src="https://media.giphy.com/media/GB4mgLDKKCiqMkXW85/giphy.gif" style="width: 100%" />
+</a>
+
+<a href="https://joshrouwhorst.github.io/qbp/examples/basic-usage.html">
 Click here for a live example.
 </a>
 
@@ -368,6 +371,9 @@ function progressUpdate ({ statuses }) {
 
 <a href="https://joshrouwhorst.github.io/qbp/examples/statuses.html">
     <img src="https://media.giphy.com/media/DKsUsizLhUeKT2Lo7x/giphy.gif" style="width: 100%">
+</a>
+
+<a href="https://joshrouwhorst.github.io/qbp/examples/statuses.html">
     Click for live example.
 </a>
 
@@ -405,6 +411,9 @@ async function addStudent(teacher, classRoom, student, { queue }) {
 
 <a href="https://joshrouwhorst.github.io/qbp/examples/mix.html">
     <img src="https://media.giphy.com/media/6Ai2y8p3VyffbWaUkh/giphy.gif" style="width: 100%">
+</a>
+
+<a href="https://joshrouwhorst.github.io/qbp/examples/mix.html">
     Click for live example.
 </a>
 
