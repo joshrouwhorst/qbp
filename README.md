@@ -15,6 +15,7 @@ Reach out on [Twitter](https://twitter.com/joshrouwhorst) or [GitHub](https://gi
   - [Contents](#contents)
   - [Usage](#usage)
     - [Basic Usage Example](#basic-usage-example)
+    - [Return Object](#return-object)
   - [Queue Object](#queue-object)
     - [queue.name](#queuename)
     - [queue.empty()](#queueempty)
@@ -27,6 +28,7 @@ Reach out on [Twitter](https://twitter.com/joshrouwhorst) or [GitHub](https://gi
     - [queue.stopRateLimit()](#queuestopratelimit)
     - [queue.counts](#queuecounts)
   - [Progress Updates](#progress-updates)
+    - [Progress Updates Example](#progress-updates-example)
   - [Throttling](#throttling)
   - [Rate Limiting](#rate-limiting)
   - [Batching](#batching)
@@ -57,6 +59,8 @@ This is the core of qbp's functionality. It will loop through `items` and will c
 <a href="https://joshrouwhorst.github.io/qbp/examples/basic-usage.html">
 Click here for a live example.
 </a>
+
+### Return Object
 
 qbp returns an object with a few attributes:
 
@@ -206,6 +210,16 @@ await qbp(items, (...args) => each(...args), {
 ```
 
 This will have the progress function called every 5 seconds. It will also be called when the queue is empty regardless of the interval.
+
+### Progress Updates Example
+<div>
+<a href="https://joshrouwhorst.github.io/qbp/examples/progress.html">
+<img src="https://media.giphy.com/media/hbZcLXbWm4k1GQbjch/giphy.gif" width="100%" />
+</a>
+</div>
+<a href="https://joshrouwhorst.github.io/qbp/examples/progress.html">
+Click here for live example.
+</a>
 
 ## Throttling
 
