@@ -14,6 +14,7 @@ Reach out on [Twitter](https://twitter.com/joshrouwhorst) or [GitHub](https://gi
 - [qbp - queue, batch, process](#qbp---queue-batch-process)
   - [Contents](#contents)
   - [Usage](#usage)
+    - [Basic Usage Example](#basic-usage-example)
   - [Queue Object](#queue-object)
     - [queue.name](#queuename)
     - [queue.empty()](#queueempty)
@@ -26,11 +27,14 @@ Reach out on [Twitter](https://twitter.com/joshrouwhorst) or [GitHub](https://gi
     - [queue.stopRateLimit()](#queuestopratelimit)
     - [queue.counts](#queuecounts)
   - [Progress Updates](#progress-updates)
+    - [Progress Updates Example](#progress-updates-example)
   - [Throttling](#throttling)
   - [Rate Limiting](#rate-limiting)
   - [Batching](#batching)
   - [Item Statuses](#item-statuses)
+    - [Statuses Example](#statuses-example)
   - [Mixing](#mixing)
+    - [Mix Example](#mix-example)
   - [Error Handling](#error-handling)
   - [Empty Function](#empty-function)
   - [Testing](#testing)
@@ -42,6 +46,8 @@ await qbp(items, (item) => each(item));
 ```
 
 This is the core of qbp's functionality. It will loop through `items` and will concurrently pass every item to your `each` function and await its completion.
+
+### Basic Usage Example
 
 <iframe src="https://codesandbox.io/embed/qbp-basic-usage-ykzym?fontsize=14&hidenavigation=1&theme=dark"
      style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
@@ -198,6 +204,15 @@ await qbp(items, (...args) => each(...args), {
 ```
 
 This will have the progress function called every 5 seconds. It will also be called when the queue is empty regardless of the interval.
+
+### Progress Updates Example
+
+<iframe src="https://codesandbox.io/embed/qbp-progress-updates-example-5g9sm?fontsize=14&hidenavigation=1&theme=dark"
+     style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
+     title="qbp - Progress Updates Example"
+     allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
+     sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+   ></iframe>
 
 ## Throttling
 
@@ -362,6 +377,8 @@ function progressUpdate ({ statuses }) {
 
 ```
 
+### Statuses Example
+
 <iframe src="https://codesandbox.io/embed/rough-darkness-31wjr?fontsize=14&hidenavigation=1&theme=dark"
      style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
      title="rough-darkness-31wjr"
@@ -419,6 +436,15 @@ async function each(teacher, classRoom, student, { queue }) {
     // etc...
 }
 ```
+
+### Mix Example
+
+<iframe src="https://codesandbox.io/embed/charming-snowflake-5evkt?fontsize=14&hidenavigation=1&theme=dark"
+     style="width:100%; height:500px; border:0; border-radius: 4px; overflow:hidden;"
+     title="qbp - Mix Example"
+     allow="accelerometer; ambient-light-sensor; camera; encrypted-media; geolocation; gyroscope; hid; microphone; midi; payment; usb; vr; xr-spatial-tracking"
+     sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
+   ></iframe>
 
 > One thing to keep in mind. You only have one `queue` object using this. The `queue.add()` function won't perform the mixing functionality that you get when you pass it in to the `mix()` function. But if you don't need to add any more items while processing, then this works perfect.
 
